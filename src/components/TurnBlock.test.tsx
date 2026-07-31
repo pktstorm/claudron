@@ -111,3 +111,67 @@ describe("TurnBlock", () => {
     expect(screen.queryByText(/no result/i)).toBeNull();
   });
 });
+
+describe("markdown rendering", () => {
+  // Claude Code emits markdown. Rendered as plain text, `**bold**` and fenced
+  // code blocks reach the user as literal characters -- these tests assert on
+  // the produced ELEMENTS, because asserting on text alone passes either way.
+
+  it("renders bold as a <strong> element, not literal asterisks", () => {
+    const { container } = render(
+      <TurnBlock turn={turn({ blocks: [{ kind: "text", text: "a **bold** word" }] })} onExpandSubagent={vi.fn()} />,
+    );
+    expect(container.querySelector("strong")?.textContent).toBe("bold");
+    expect(container.textContent).not.toContain("**");
+  });
+
+  it("renders a fenced code block as <pre><code>, preserving its content", () => {
+    const md = "run this:\n\n```sh\nyarn install\n```";
+    const { container } = render(
+      <TurnBlock turn={turn({ blocks: [{ kind: "text", text: md }] })} onExpandSubagent={vi.fn()} />,
+    );
+    const code = container.querySelector("pre code");
+    expect(code).not.toBeNull();
+    expect(code?.textContent).toContain("yarn install");
+    expect(container.textContent).not.toContain("```");
+  });
+
+  it("renders list items as <li>, not as leading dashes", () => {
+    const { container } = render(
+      <TurnBlock turn={turn({ blocks: [{ kind: "text", text: "- one\n- two" }] })} onExpandSubagent={vi.fn()} />,
+    );
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+  });
+
+  it("renders a GFM table, which plain markdown would not", () => {
+    const md = "| a | b |\n|---|---|\n| 1 | 2 |";
+    const { container } = render(
+      <TurnBlock turn={turn({ blocks: [{ kind: "text", text: md }] })} onExpandSubagent={vi.fn()} />,
+    );
+    expect(container.querySelector("table")).not.toBeNull();
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+  });
+
+  it("does not execute raw HTML embedded in transcript text", () => {
+    // Transcript content is untrusted: it carries whatever the model wrote and
+    // whatever tool output was captured. Raw HTML must never reach the DOM.
+    const md = '<img src=x onerror="window.__pwned=1"> plain';
+    const { container } = render(
+      <TurnBlock turn={turn({ blocks: [{ kind: "text", text: md }] })} onExpandSubagent={vi.fn()} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("plain");
+  });
+
+  it("still renders tool calls alongside markdown text", () => {
+    // Guards the existing behaviour: markdown must not displace tool blocks.
+    render(
+      <TurnBlock
+        turn={turn({ blocks: [{ kind: "text", text: "**go**" }, { kind: "tool", call: call() }] })}
+        onExpandSubagent={vi.fn()}
+      />,
+    );
+    // ToolCallBlock renders `description ?? name`, so this fixture shows its description.
+    expect(screen.getByText("List files")).toBeDefined();
+  });
+});
