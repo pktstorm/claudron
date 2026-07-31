@@ -27,3 +27,6 @@ dist-ssr
 *.sln
 *.sw?
 .icon-masked.png
+
+# Yarn build artifact — regenerated on every install
+.yarn/install-state.gz
