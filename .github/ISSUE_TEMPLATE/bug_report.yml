@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in Claudron does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this. Please redact anything sensitive from
+        transcript excerpts or paths before posting.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Claudron with N sessions indexed
+        2. Select a session in a worktree
+        3. Open the Git tab
+        4. ...
+    validations:
+      required: true
+
+  - type: input
+    id: claudron-version
+    attributes:
+      label: Claudron version
+      description: From the app bundle, or the commit you built from.
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context
+      description: |
+        If it involves a specific session, what was that session doing? For git issues, is the
+        directory a worktree, and is it dirty? Output from `make test` or `make lint` helps if
+        you are building from source.
+    validations:
+      required: false

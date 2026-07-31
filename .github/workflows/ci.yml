@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macOS: Tauri needs the system WebKit, and the app is macOS-only anyway.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Typecheck
+        run: yarn tsc --noEmit
+
+      - name: Frontend tests
+        run: yarn vitest run
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy -- -D warnings
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      # Tests run concurrently in one process, so a change touching shared state
+      # can fail intermittently. One green run does not prove a race is absent:
+      # a PATH-mutating test once failed about one run in seven.
+      - name: Race check
+        working-directory: src-tauri
+        run: |
+          for i in $(seq 1 10); do
+            cargo test --lib -- --test-threads=8 || { echo "FAILED ON ITERATION $i"; exit 1; }
+          done
+
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build the app bundle
+        run: yarn tauri build --bundles app

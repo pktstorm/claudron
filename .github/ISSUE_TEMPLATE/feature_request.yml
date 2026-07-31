@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest something Claudron should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the situation you are in when you want this, not the feature itself. The
+        underlying problem usually admits more than one solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+      description: Existing workarounds, and why they fall short.
+    validations:
+      required: false
