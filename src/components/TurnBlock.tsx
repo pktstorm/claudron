@@ -1,5 +1,6 @@
 import type { Turn } from "../types/conversation";
 import { ToolCallBlock } from "./ToolCallBlock";
+import { Markdown } from "./Markdown";
 
 export function TurnBlock({
   turn,
@@ -15,12 +16,7 @@ export function TurnBlock({
     >
       {turn.blocks.map((b, i) =>
         b.kind === "text" ? (
-          <p
-            key={`text-${i}`}
-            className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-200"
-          >
-            {b.text}
-          </p>
+          <Markdown key={`text-${i}`} text={b.text} />
         ) : (
           // Key by the call's own id, not the array index alone. A late result
           // patches this turn in place; an index-only key would tie identity to
