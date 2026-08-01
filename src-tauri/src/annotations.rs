@@ -64,7 +64,10 @@ mod tests {
 
         let loaded = load(&p).unwrap();
         assert_eq!(loaded.get("s1").unwrap().notes, "check the migration");
-        assert_eq!(loaded.get("s1").unwrap().status, Some(ManualStatus::Blocked));
+        assert_eq!(
+            loaded.get("s1").unwrap().status,
+            Some(ManualStatus::Blocked)
+        );
     }
 
     #[test]
@@ -87,7 +90,11 @@ mod tests {
     #[test]
     fn save_creates_missing_parent_directories() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("nested").join("deep").join("annotations.json");
+        let p = dir
+            .path()
+            .join("nested")
+            .join("deep")
+            .join("annotations.json");
         let map = HashMap::new();
         save(&p, &map).unwrap();
         assert!(p.exists());
@@ -103,6 +110,9 @@ mod tests {
             .filter_map(Result::ok)
             .filter(|e| e.file_name().to_string_lossy().contains("tmp"))
             .collect();
-        assert!(leftovers.is_empty(), "atomic save must clean up its temp file");
+        assert!(
+            leftovers.is_empty(),
+            "atomic save must clean up its temp file"
+        );
     }
 }

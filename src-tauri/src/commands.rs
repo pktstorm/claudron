@@ -58,7 +58,10 @@ pub fn list_sessions() -> SessionList {
     let sessions = assemble(&index::projects_root(), &annotations::store_path(), &live);
     let observed: Vec<String> = sessions.iter().filter_map(|s| s.version.clone()).collect();
     let version_baseline = crate::version::baseline(crate::version::installed(), &observed);
-    SessionList { sessions, version_baseline }
+    SessionList {
+        sessions,
+        version_baseline,
+    }
 }
 
 #[tauri::command]
@@ -103,9 +106,17 @@ mod tests {
         let proj = dir.path().join("proj");
         fs::create_dir_all(&proj).unwrap();
         let mut f = fs::File::create(proj.join("s1.jsonl")).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s1","cwd":"/live/repo"}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","entrypoint":"cli","sessionId":"s1","cwd":"/live/repo"}}"#
+        )
+        .unwrap();
         let mut g = fs::File::create(proj.join("s2.jsonl")).unwrap();
-        writeln!(g, r#"{{"type":"user","entrypoint":"cli","sessionId":"s2","cwd":"/dead/repo"}}"#).unwrap();
+        writeln!(
+            g,
+            r#"{{"type":"user","entrypoint":"cli","sessionId":"s2","cwd":"/dead/repo"}}"#
+        )
+        .unwrap();
         let store = dir.path().join("annotations.json");
         (dir, store)
     }
@@ -161,7 +172,11 @@ mod tests {
         let live_dir = dir.path().join("live-session-dir");
         fs::create_dir_all(&live_dir).unwrap();
         let uncanonical_cwd = live_dir.to_string_lossy().to_string();
-        let canonical_cwd = live_dir.canonicalize().unwrap().to_string_lossy().to_string();
+        let canonical_cwd = live_dir
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         assert_ne!(
             uncanonical_cwd, canonical_cwd,
             "fixture did not actually exercise aliasing on this machine"
@@ -178,7 +193,11 @@ mod tests {
 
         let sessions = assemble(dir.path(), &store, &[canonical_cwd]);
         let s1 = sessions.iter().find(|s| s.session_id == "s1").unwrap();
-        assert_eq!(s1.liveness, Liveness::Legacy, "aliased path must still be recognized as live");
+        assert_eq!(
+            s1.liveness,
+            Liveness::Legacy,
+            "aliased path must still be recognized as live"
+        );
     }
 
     #[test]
@@ -191,7 +210,10 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("s1".to_string(), Annotation::default());
         // Simulate what set_annotation does: load must fail, so no save happens.
-        assert!(annotations::load(&store).is_err(), "corrupt store must not load as empty");
+        assert!(
+            annotations::load(&store).is_err(),
+            "corrupt store must not load as empty"
+        );
 
         // The corrupt file must be left exactly as it was, not overwritten.
         assert_eq!(std::fs::read(&store).unwrap(), before);

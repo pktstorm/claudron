@@ -59,10 +59,7 @@ pub fn load_conversation(session_id: String) -> Result<Conversation, String> {
 }
 
 #[tauri::command]
-pub fn poll_conversation(
-    session_id: String,
-    offset: u64,
-) -> Result<ConversationDelta, String> {
+pub fn poll_conversation(session_id: String, offset: u64) -> Result<ConversationDelta, String> {
     let path = resolve(&session_id)?;
     // Hold the lock across the whole read. Two polls for the same session can
     // overlap (the UI polls on an interval), and a take-then-store pair would
@@ -88,17 +85,18 @@ pub fn poll_conversation(
 }
 
 #[tauri::command]
-pub fn load_subagent(
-    session_id: String,
-    agent_id: String,
-) -> Result<Conversation, String> {
+pub fn load_subagent(session_id: String, agent_id: String) -> Result<Conversation, String> {
     let parent = resolve(&session_id)?;
     let path = subagent::subagent_path(&parent, &agent_id);
     // Subagent transcripts are loaded whole and never tailed, so they need no
     // carried state.
     let r = tail::read_from(&path, 0, parse::PendingCalls::default())
         .map_err(|_| "subagent transcript unavailable".to_string())?;
-    Ok(Conversation { session_id, turns: r.turns, offset: r.offset })
+    Ok(Conversation {
+        session_id,
+        turns: r.turns,
+        offset: r.offset,
+    })
 }
 
 /// Stamp `agent_id` onto any tool call whose result announced one, so the UI
@@ -190,7 +188,11 @@ mod tests {
 
         let delta = poll_conversation("sess-late".to_string(), first.offset).unwrap();
         assert!(delta.turns.is_empty(), "no new turns, just a result");
-        assert_eq!(delta.updates.len(), 1, "the late result must survive via PENDING");
+        assert_eq!(
+            delta.updates.len(),
+            1,
+            "the late result must survive via PENDING"
+        );
         assert_eq!(delta.updates[0].tool_use_id, "t1");
         assert_eq!(delta.updates[0].result, "all green");
 

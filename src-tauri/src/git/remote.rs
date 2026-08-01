@@ -84,9 +84,22 @@ pub fn parse_pr_json(json: &str) -> Option<PullRequest> {
 
     Some(PullRequest {
         number: first.get("number").and_then(Value::as_u64)?,
-        title: first.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
-        state: first.get("state").and_then(Value::as_str).unwrap_or("").to_string(),
-        checks: CheckRollup { state, passing, failing, pending },
+        title: first
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        state: first
+            .get("state")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        checks: CheckRollup {
+            state,
+            passing,
+            failing,
+            pending,
+        },
     })
 }
 
@@ -118,17 +131,23 @@ pub fn fetch(cwd: &Path, branch: &str) -> Result<GitRemote, String> {
     let out = run(
         "gh",
         &[
-            "pr", "list",
-            "--head", branch,
-            "--limit", "1",
-            "--json", "number,title,state,statusCheckRollup",
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--limit",
+            "1",
+            "--json",
+            "number,title,state,statusCheckRollup",
         ],
         cwd,
         GH_TIMEOUT,
     )
     .map_err(describe_fetch_error)?;
 
-    Ok(GitRemote { pull_request: parse_pr_json(&out) })
+    Ok(GitRemote {
+        pull_request: parse_pr_json(&out),
+    })
 }
 
 #[cfg(test)]
@@ -343,7 +362,10 @@ mod tests {
             code: Some(4),
             stderr: "some unrelated message".to_string(),
         });
-        assert_eq!(err, "gh is not authenticated -- run `gh auth login`", "got {err:?}");
+        assert_eq!(
+            err, "gh is not authenticated -- run `gh auth login`",
+            "got {err:?}"
+        );
     }
 
     #[test]
@@ -354,7 +376,10 @@ mod tests {
             code: Some(1),
             stderr: "authentication required".to_string(),
         });
-        assert_eq!(err, "gh is not authenticated -- run `gh auth login`", "got {err:?}");
+        assert_eq!(
+            err, "gh is not authenticated -- run `gh auth login`",
+            "got {err:?}"
+        );
     }
 
     #[test]
@@ -407,7 +432,10 @@ mod tests {
 
         let err = r.expect_err("an unauthenticated gh must be reported as an error");
         println!("unauthenticated gh -> {err:?}");
-        assert_eq!(err, "gh is not authenticated -- run `gh auth login`", "got {err:?}");
+        assert_eq!(
+            err, "gh is not authenticated -- run `gh auth login`",
+            "got {err:?}"
+        );
     }
 
     /// Exercises the real `gh` binary and real GitHub JSON. Point
@@ -431,7 +459,16 @@ mod tests {
         // currently-open PR at runtime instead of pinning one by hand.
         let discover = run(
             "gh",
-            &["pr", "list", "--state", "open", "--limit", "1", "--json", "headRefName"],
+            &[
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--limit",
+                "1",
+                "--json",
+                "headRefName",
+            ],
             &p,
             GH_TIMEOUT,
         );
@@ -439,9 +476,13 @@ mod tests {
             println!("gh pr list failed to discover an open PR; skipping: {discover:?}");
             return;
         };
-        let branch = serde_json::from_str::<Value>(&out)
-            .ok()
-            .and_then(|v| v.as_array()?.first()?.get("headRefName")?.as_str().map(String::from));
+        let branch = serde_json::from_str::<Value>(&out).ok().and_then(|v| {
+            v.as_array()?
+                .first()?
+                .get("headRefName")?
+                .as_str()
+                .map(String::from)
+        });
         let Some(branch) = branch else {
             println!("no open pull request in CLAUDRON_TEST_REPO right now; skipping (genuine skip, not a pass)");
             return;
@@ -473,7 +514,9 @@ mod tests {
                 g.pull_request.is_none(),
                 "a nonexistent branch must report no pull request: {none:?}"
             ),
-            Err(e) => panic!("a branch with no PR must be Ok with pull_request None, not an error: {e:?}"),
+            Err(e) => {
+                panic!("a branch with no PR must be Ok with pull_request None, not an error: {e:?}")
+            }
         }
 
         assert_ne!(

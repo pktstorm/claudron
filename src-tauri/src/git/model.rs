@@ -116,8 +116,14 @@ mod tests {
 
     #[test]
     fn check_state_serializes_lowercase() {
-        assert_eq!(serde_json::to_string(&CheckState::Passing).unwrap(), "\"passing\"");
-        assert_eq!(serde_json::to_string(&CheckState::None).unwrap(), "\"none\"");
+        assert_eq!(
+            serde_json::to_string(&CheckState::Passing).unwrap(),
+            "\"passing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckState::None).unwrap(),
+            "\"none\""
+        );
     }
 
     #[test]

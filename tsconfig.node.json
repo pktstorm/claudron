@@ -4,7 +4,12 @@
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    // tsconfig.json sets this for src/, but vite.config.ts is covered by this
+    // file and was therefore never strictly checked. Type-aware lint rules --
+    // prefer-nullish-coalescing in particular -- cannot reason about
+    // null-vs-undefined without it.
+    "strict": true
   },
   "include": ["vite.config.ts"]
 }

@@ -82,9 +82,7 @@ fn remove_worktree_impl(path: &str, live_cwds: &[String]) -> Result<(), String> 
         canonical_c.starts_with(&canonical_path)
     });
     if occupied {
-        return Err(
-            "a live session is running in this worktree -- stop it before removing".into(),
-        );
+        return Err("a live session is running in this worktree -- stop it before removing".into());
     }
 
     // Run from the parent repo: removing a worktree from inside itself fails.
@@ -153,7 +151,10 @@ mod tests {
 
         let e = remove_worktree_impl(&wt.to_string_lossy(), &[]).unwrap_err();
         assert!(e.contains("uncommitted"), "got {e:?}");
-        assert!(wt.exists(), "a refused removal must leave the worktree in place");
+        assert!(
+            wt.exists(),
+            "a refused removal must leave the worktree in place"
+        );
     }
 
     #[test]
@@ -172,7 +173,10 @@ mod tests {
         remove_worktree_impl(&wt.to_string_lossy(), &[]).unwrap();
 
         let branches = sh("git", &["branch"], d.path(), Duration::from_secs(5)).unwrap();
-        assert!(branches.contains("keepme"), "branch was deleted: {branches:?}");
+        assert!(
+            branches.contains("keepme"),
+            "branch was deleted: {branches:?}"
+        );
     }
 
     #[test]
@@ -187,7 +191,10 @@ mod tests {
 
         let e = remove_worktree_impl(&wt_str, std::slice::from_ref(&wt_str)).unwrap_err();
         assert!(e.contains("live session"), "got {e:?}");
-        assert!(wt.exists(), "a refused removal must leave the worktree in place");
+        assert!(
+            wt.exists(),
+            "a refused removal must leave the worktree in place"
+        );
     }
 
     #[test]
@@ -218,7 +225,10 @@ mod tests {
 
         let e = remove_worktree_impl(&path, &[canonical_live_cwd]).unwrap_err();
         assert!(e.contains("live session"), "got {e:?}");
-        assert!(wt.exists(), "a refused removal must leave the worktree in place");
+        assert!(
+            wt.exists(),
+            "a refused removal must leave the worktree in place"
+        );
     }
 
     #[test]
@@ -236,7 +246,10 @@ mod tests {
 
         let e = remove_worktree_impl(&wt.to_string_lossy(), &[live_cwd]).unwrap_err();
         assert!(e.contains("live session"), "got {e:?}");
-        assert!(wt.exists(), "a refused removal must leave the worktree in place");
+        assert!(
+            wt.exists(),
+            "a refused removal must leave the worktree in place"
+        );
     }
 
     #[test]
@@ -251,7 +264,10 @@ mod tests {
 
         let e = remove_worktree_impl(&wt.to_string_lossy(), &[live_cwd]).unwrap_err();
         assert!(e.contains("live session"), "got {e:?}");
-        assert!(wt.exists(), "a refused removal must leave the worktree in place");
+        assert!(
+            wt.exists(),
+            "a refused removal must leave the worktree in place"
+        );
     }
 
     #[test]
@@ -264,7 +280,11 @@ mod tests {
         let wt = add_worktree(d.path(), "wt");
         let sibling = d.path().join("wt-backup");
         std::fs::create_dir(&sibling).unwrap();
-        let live_cwd = sibling.canonicalize().unwrap().to_string_lossy().to_string();
+        let live_cwd = sibling
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         remove_worktree_impl(&wt.to_string_lossy(), &[live_cwd]).unwrap();
         assert!(!wt.exists(), "a same-prefix sibling must not block removal");

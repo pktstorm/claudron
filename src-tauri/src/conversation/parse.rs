@@ -58,7 +58,9 @@ pub fn parse_with_pending(
         if ty != "assistant" && ty != "user" {
             continue; // control-plane record, not conversation
         }
-        let Some(msg) = rec.get("message") else { continue };
+        let Some(msg) = rec.get("message") else {
+            continue;
+        };
 
         let role = match msg.get("role").and_then(Value::as_str) {
             Some("assistant") => Role::Assistant,
@@ -82,12 +84,18 @@ pub fn parse_with_pending(
                         Some("text") => {
                             if let Some(t) = b.get("text").and_then(Value::as_str) {
                                 if !t.trim().is_empty() {
-                                    blocks.push(Block::Text { text: t.to_string() });
+                                    blocks.push(Block::Text {
+                                        text: t.to_string(),
+                                    });
                                 }
                             }
                         }
                         Some("tool_use") => {
-                            let id = b.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+                            let id = b
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
                             let call = ToolCall {
                                 name: b
                                     .get("name")
@@ -154,7 +162,11 @@ pub fn parse_with_pending(
         }
 
         turns.push(Turn {
-            uuid: rec.get("uuid").and_then(Value::as_str).unwrap_or("").to_string(),
+            uuid: rec
+                .get("uuid")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             role,
             timestamp: rec
                 .get("timestamp")
@@ -177,7 +189,11 @@ pub fn parse_with_pending(
         carried.insert(id, pos);
     }
 
-    ParseOutput { turns, updates, pending: PendingCalls(carried) }
+    ParseOutput {
+        turns,
+        updates,
+        pending: PendingCalls(carried),
+    }
 }
 
 #[cfg(test)]
@@ -185,7 +201,10 @@ mod tests {
     use super::*;
 
     fn lines(v: &[&str]) -> std::vec::IntoIter<String> {
-        v.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter()
+        v.iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
     #[test]
@@ -197,7 +216,12 @@ mod tests {
         assert_eq!(turns[0].role, Role::Assistant);
         assert_eq!(turns[0].uuid, "u1");
         assert_eq!(turns[0].model.as_deref(), Some("claude-opus-5"));
-        assert_eq!(turns[0].blocks, vec![Block::Text { text: "Hello there".into() }]);
+        assert_eq!(
+            turns[0].blocks,
+            vec![Block::Text {
+                text: "Hello there".into()
+            }]
+        );
     }
 
     #[test]
@@ -208,7 +232,12 @@ mod tests {
         ])).turns;
         assert_eq!(turns.len(), 1);
         assert_eq!(turns[0].role, Role::User);
-        assert_eq!(turns[0].blocks, vec![Block::Text { text: "just text".into() }]);
+        assert_eq!(
+            turns[0].blocks,
+            vec![Block::Text {
+                text: "just text".into()
+            }]
+        );
     }
 
     #[test]
@@ -331,8 +360,15 @@ mod tests {
             ]),
             first.pending,
         );
-        assert!(second.turns.is_empty(), "a result-only batch yields no new turns");
-        assert_eq!(second.updates.len(), 1, "the result must survive as an update");
+        assert!(
+            second.turns.is_empty(),
+            "a result-only batch yields no new turns"
+        );
+        assert_eq!(
+            second.updates.len(),
+            1,
+            "the result must survive as an update"
+        );
         assert_eq!(second.updates[0].tool_use_id, "t1");
         assert_eq!(second.updates[0].result, "all green");
         assert!(!second.updates[0].is_error);
@@ -390,7 +426,11 @@ mod tests {
             r#"{"type":"assistant","uuid":"a1","timestamp":"T1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}"#,
             r#"{"type":"user","uuid":"u1","timestamp":"T2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"out"}]}}"#,
         ])).turns;
-        assert_eq!(turns.len(), 1, "the tool_result-only user turn must not render");
+        assert_eq!(
+            turns.len(),
+            1,
+            "the tool_result-only user turn must not render"
+        );
     }
 
     #[test]
@@ -403,7 +443,11 @@ mod tests {
         }
         // Find the largest depth-2 transcript.
         let mut biggest: Option<(u64, std::path::PathBuf)> = None;
-        for e in walkdir::WalkDir::new(&root).max_depth(2).into_iter().filter_map(Result::ok) {
+        for e in walkdir::WalkDir::new(&root)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             if e.path().extension().and_then(|x| x.to_str()) != Some("jsonl") {
                 continue;
             }
@@ -415,10 +459,7 @@ mod tests {
         let Some((len, path)) = biggest else { return };
         let f = std::fs::File::open(&path).unwrap();
         let t0 = std::time::Instant::now();
-        let turns = parse_records(
-            std::io::BufReader::new(f).lines().map_while(Result::ok),
-        )
-        .turns;
+        let turns = parse_records(std::io::BufReader::new(f).lines().map_while(Result::ok)).turns;
         let elapsed = t0.elapsed();
         println!(
             "parsed {} bytes -> {} turns in {:?}",
@@ -454,10 +495,22 @@ mod tests {
         // agent's display name, a moved cwd, worktree bookkeeping. None carries
         // a `message` field, so none is renderable conversation.
         const KNOWN: &[&str] = &[
-            "assistant", "user", "attachment", "last-prompt", "ai-title",
-            "queue-operation", "mode", "permission-mode", "pr-link", "system",
-            "file-history-snapshot", "file-history-delta", "frame-link",
-            "agent-name", "relocated", "worktree-state",
+            "assistant",
+            "user",
+            "attachment",
+            "last-prompt",
+            "ai-title",
+            "queue-operation",
+            "mode",
+            "permission-mode",
+            "pr-link",
+            "system",
+            "file-history-snapshot",
+            "file-history-delta",
+            "frame-link",
+            "agent-name",
+            "relocated",
+            "worktree-state",
         ];
         let root = crate::index::projects_root();
         if !root.exists() {
@@ -465,12 +518,18 @@ mod tests {
         }
         let mut seen: BTreeSet<String> = BTreeSet::new();
         let mut files = 0;
-        for e in walkdir::WalkDir::new(&root).max_depth(2).into_iter().filter_map(Result::ok) {
+        for e in walkdir::WalkDir::new(&root)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             if e.path().extension().and_then(|x| x.to_str()) != Some("jsonl") {
                 continue;
             }
             files += 1;
-            let Ok(f) = std::fs::File::open(e.path()) else { continue };
+            let Ok(f) = std::fs::File::open(e.path()) else {
+                continue;
+            };
             for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
                     if let Some(t) = v.get("type").and_then(|x| x.as_str()) {
@@ -480,7 +539,10 @@ mod tests {
             }
         }
         println!("record types seen across {files} files: {seen:?}");
-        let unknown: Vec<_> = seen.iter().filter(|t| !KNOWN.contains(&t.as_str())).collect();
+        let unknown: Vec<_> = seen
+            .iter()
+            .filter(|t| !KNOWN.contains(&t.as_str()))
+            .collect();
         assert!(
             unknown.is_empty(),
             "unrecognised record type(s) {unknown:?} -- decide whether they render or are ignored, \

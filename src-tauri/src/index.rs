@@ -160,7 +160,11 @@ mod tests {
 
         let mut a = fs::File::create(proj.join("aaa.jsonl")).unwrap();
         writeln!(a, r#"{{"type":"user","entrypoint":"cli","sessionId":"aaa","cwd":"/Users/s/code/repo","gitBranch":"main"}}"#).unwrap();
-        writeln!(a, r#"{{"type":"ai-title","aiTitle":"Session A","sessionId":"aaa"}}"#).unwrap();
+        writeln!(
+            a,
+            r#"{{"type":"ai-title","aiTitle":"Session A","sessionId":"aaa"}}"#
+        )
+        .unwrap();
 
         let mut b = fs::File::create(proj.join("bbb.jsonl")).unwrap();
         writeln!(b, r#"{{"type":"user","entrypoint":"sdk-py","sessionId":"bbb","cwd":"/Users/s/code/repo"}}"#).unwrap();
@@ -232,8 +236,15 @@ mod tests {
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
             .count();
         let sessions = index_sessions(&root);
-        println!("transcripts on disk: {}  indexed sessions: {}", total, sessions.len());
-        assert!(sessions.len() < total / 2, "entrypoint filter should remove most transcripts");
+        println!(
+            "transcripts on disk: {}  indexed sessions: {}",
+            total,
+            sessions.len()
+        );
+        assert!(
+            sessions.len() < total / 2,
+            "entrypoint filter should remove most transcripts"
+        );
     }
 
     #[test]
@@ -253,8 +264,16 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("s.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
-        writeln!(f, r#"{{"type":"ai-title","aiTitle":"First","sessionId":"s"}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"ai-title","aiTitle":"First","sessionId":"s"}}"#
+        )
+        .unwrap();
         drop(f);
         let first = index_sessions(dir.path());
         assert_eq!(first[0].ai_title.as_deref(), Some("First"));
@@ -262,11 +281,23 @@ mod tests {
         // Rewrite with a new title and a distinctly newer mtime.
         std::thread::sleep(std::time::Duration::from_millis(1100));
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
-        writeln!(f, r#"{{"type":"ai-title","aiTitle":"Second","sessionId":"s"}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"ai-title","aiTitle":"Second","sessionId":"s"}}"#
+        )
+        .unwrap();
         drop(f);
         let second = index_sessions(dir.path());
-        assert_eq!(second[0].ai_title.as_deref(), Some("Second"), "changed file must be re-parsed");
+        assert_eq!(
+            second[0].ai_title.as_deref(),
+            Some("Second"),
+            "changed file must be re-parsed"
+        );
     }
 
     #[test]
@@ -279,8 +310,16 @@ mod tests {
 
         let write = |title: &str| {
             let mut f = std::fs::File::create(&path).unwrap();
-            writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#).unwrap();
-            writeln!(f, r#"{{"type":"ai-title","aiTitle":"{title}","sessionId":"fast"}}"#).unwrap();
+            writeln!(
+                f,
+                r#"{{"type":"user","entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#
+            )
+            .unwrap();
+            writeln!(
+                f,
+                r#"{{"type":"ai-title","aiTitle":"{title}","sessionId":"fast"}}"#
+            )
+            .unwrap();
         };
 
         let secs_of = |p: &std::path::Path| -> u64 {
@@ -327,18 +366,27 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("gone.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#
+        )
+        .unwrap();
         drop(f);
         assert_eq!(index_sessions(dir.path()).len(), 1);
         std::fs::remove_file(&path).unwrap();
-        assert!(index_sessions(dir.path()).is_empty(), "deleted transcript must not linger in cache");
+        assert!(
+            index_sessions(dir.path()).is_empty(),
+            "deleted transcript must not linger in cache"
+        );
     }
 
     #[test]
     #[ignore]
     fn warm_scan_of_the_real_tree_is_fast() {
         let root = projects_root();
-        if !root.exists() { return; }
+        if !root.exists() {
+            return;
+        }
         let t0 = std::time::Instant::now();
         let first = index_sessions(&root);
         let cold = t0.elapsed();
@@ -347,7 +395,10 @@ mod tests {
         let warm = t1.elapsed();
         println!("cold: {cold:?}  warm: {warm:?}  sessions: {}", first.len());
         assert_eq!(first.len(), second.len());
-        assert!(warm < std::time::Duration::from_secs(2), "warm scan took {warm:?}, expected < 2s");
+        assert!(
+            warm < std::time::Duration::from_secs(2),
+            "warm scan took {warm:?}, expected < 2s"
+        );
     }
 
     fn session_with(id: &str, liveness: Liveness, last_activity: i64) -> Session {
