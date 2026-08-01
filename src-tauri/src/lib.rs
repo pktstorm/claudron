@@ -3,6 +3,7 @@ pub mod annotations;
 pub mod commands;
 pub mod conversation;
 pub mod git;
+pub mod hooks;
 pub mod index;
 pub mod model;
 pub mod process;
@@ -93,6 +94,9 @@ pub fn run() {
             git::git_local,
             git::git_remote,
             git::remove_worktree,
+            hooks::hook_status,
+            hooks::install_hooks,
+            hooks::uninstall_hooks,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

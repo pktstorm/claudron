@@ -9,6 +9,22 @@ use std::path::Path;
 ///
 /// Split out from the Tauri command so it is testable without an app handle.
 pub fn assemble(root: &Path, store: &Path, live_cwds: &[String]) -> Vec<Session> {
+    assemble_with_hooks(root, store, live_cwds, &Default::default(), &[])
+}
+
+/// `assemble`, with hook events and the live pid list.
+///
+/// When a hook event names a session AND its recorded pid is still live, that
+/// session is exactly the one running in that process -- no directory guessing.
+/// Sessions without a hook event fall back to the cwd inference, so the feature
+/// degrades to the previous behaviour rather than disappearing.
+pub fn assemble_with_hooks(
+    root: &Path,
+    store: &Path,
+    live_cwds: &[String],
+    hook_events: &std::collections::HashMap<String, crate::hooks::HookEvent>,
+    live_pids: &[i32],
+) -> Vec<Session> {
     let saved = annotations::load(store).unwrap_or_else(|e| {
         eprintln!("claudron: could not load annotations: {e}");
         std::collections::HashMap::new()
@@ -26,23 +42,35 @@ pub fn assemble(root: &Path, store: &Path, live_cwds: &[String]) -> Vec<Session>
             if let Some(a) = saved.get(&s.session_id) {
                 s.annotation = a.clone();
             }
-            // A live `claude` process in this session's cwd means the session
-            // is running in a terminal Claudron did not spawn. Compare
-            // CANONICALIZED forms: live_cwds comes from `lsof -d cwd -Fn`
-            // (process.rs), which reports the fully resolved path, while a
-            // session's recorded cwd (from its transcript JSONL) is never
-            // canonicalized. The same /private (and /var, /etc, any user
-            // symlink) aliasing that made remove_worktree's occupancy guard
-            // fail open on raw string comparison applies here too -- this is
-            // only a UX inconsistency (a badge reads Idle when a session is
-            // actually live), not a safety hole, since remove_worktree does
-            // its own independent, already-fixed check. A cwd that fails to
-            // canonicalize (already-deleted directory) falls back to its raw
-            // form so it can still match another raw, uncanonicalizable cwd.
-            let canonical_s_cwd =
-                std::fs::canonicalize(&s.cwd).unwrap_or_else(|_| Path::new(&s.cwd).into());
-            if canonical_live.iter().any(|c| c == &canonical_s_cwd) {
+            // A hook event is authoritative when its pid is still live: it names
+            // THIS session, not merely a process sharing a directory. Confirming
+            // against the live pid list matters because pids are reused and a
+            // crashed session never fires SessionEnd -- the file alone proves
+            // nothing about now.
+            let hooked_live = hook_events
+                .get(&s.session_id)
+                .is_some_and(|e| live_pids.contains(&e.pid));
+
+            if hooked_live {
                 s.liveness = Liveness::Legacy;
+            } else if hook_events.contains_key(&s.session_id) {
+                // A hook event exists but its pid is gone: this session is
+                // definitively not running, whatever else shares its directory.
+                // Trusting the cwd inference here is what produced the false
+                // positives hooks exist to remove.
+            } else {
+                // No hook event for this session: fall back to the cwd
+                // inference. live_cwds comes from `lsof -d cwd -Fn`, which
+                // reports fully-resolved paths, while a session's recorded cwd
+                // is never canonicalized -- so compare canonicalized forms, or
+                // /private-style aliasing makes a live session read as Idle. A
+                // cwd that cannot canonicalize (deleted directory) falls back
+                // to its raw form so it can still match another raw one.
+                let canonical_s_cwd =
+                    std::fs::canonicalize(&s.cwd).unwrap_or_else(|_| Path::new(&s.cwd).into());
+                if canonical_live.iter().any(|c| c == &canonical_s_cwd) {
+                    s.liveness = Liveness::Legacy;
+                }
             }
             s
         })
@@ -51,11 +79,17 @@ pub fn assemble(root: &Path, store: &Path, live_cwds: &[String]) -> Vec<Session>
 
 #[tauri::command]
 pub fn list_sessions() -> SessionList {
-    let live: Vec<String> = process::discover_claude_processes()
-        .into_iter()
-        .filter_map(|p| p.cwd)
-        .collect();
-    let sessions = assemble(&index::projects_root(), &annotations::store_path(), &live);
+    let procs = process::discover_claude_processes();
+    let live_pids: Vec<i32> = procs.iter().map(|p| p.pid).collect();
+    let live: Vec<String> = procs.into_iter().filter_map(|p| p.cwd).collect();
+    let hook_events = crate::hooks::read_events(&crate::hooks::events_dir());
+    let sessions = assemble_with_hooks(
+        &index::projects_root(),
+        &annotations::store_path(),
+        &live,
+        &hook_events,
+        &live_pids,
+    );
     let observed: Vec<String> = sessions.iter().filter_map(|s| s.version.clone()).collect();
     let version_baseline = crate::version::baseline(crate::version::installed(), &observed);
     SessionList {
@@ -139,6 +173,98 @@ mod tests {
         let sessions = assemble(dir.path(), &store, &[]);
         let s2 = sessions.iter().find(|s| s.session_id == "s2").unwrap();
         assert_eq!(s2.annotation, Annotation::default());
+    }
+
+    fn hook(
+        pid: i32,
+        session: &str,
+        cwd: &str,
+    ) -> std::collections::HashMap<String, crate::hooks::HookEvent> {
+        let mut m = std::collections::HashMap::new();
+        m.insert(
+            session.to_string(),
+            crate::hooks::HookEvent {
+                pid,
+                session_id: session.to_string(),
+                cwd: cwd.to_string(),
+                event: "SessionStart".into(),
+                ts: 1,
+            },
+        );
+        m
+    }
+
+    #[test]
+    fn a_hook_event_with_a_live_pid_marks_exactly_that_session() {
+        // The point of hooks: identity, not directory guessing.
+        let (dir, store) = fixture();
+        let out = assemble_with_hooks(
+            dir.path(),
+            &store,
+            &[],
+            &hook(4242, "s1", "/live/repo"),
+            &[4242],
+        );
+        let s1 = out.iter().find(|s| s.session_id == "s1").unwrap();
+        assert_eq!(s1.liveness, Liveness::Legacy);
+        let s2 = out.iter().find(|s| s.session_id == "s2").unwrap();
+        assert_eq!(
+            s2.liveness,
+            Liveness::Idle,
+            "only the hooked session is live"
+        );
+    }
+
+    #[test]
+    fn a_hook_event_whose_pid_is_gone_does_not_mark_the_session_live() {
+        // A crashed session never fires SessionEnd, so its file outlives it.
+        // The file alone proves nothing about now.
+        let (dir, store) = fixture();
+        let out = assemble_with_hooks(
+            dir.path(),
+            &store,
+            &[],
+            &hook(4242, "s1", "/live/repo"),
+            &[], // no live pids
+        );
+        let s1 = out.iter().find(|s| s.session_id == "s1").unwrap();
+        assert_eq!(s1.liveness, Liveness::Idle);
+    }
+
+    #[test]
+    fn a_dead_hooked_session_is_not_revived_by_a_neighbour_in_its_directory() {
+        // THE bug hooks exist to fix. Another session in the same directory
+        // makes the cwd inference report this one live; the hook event proves
+        // it is not, and must win.
+        let (dir, store) = fixture();
+        let out = assemble_with_hooks(
+            dir.path(),
+            &store,
+            &["/live/repo".to_string()], // a neighbour IS live here
+            &hook(4242, "s1", "/live/repo"),
+            &[], // but s1's own pid is gone
+        );
+        let s1 = out.iter().find(|s| s.session_id == "s1").unwrap();
+        assert_eq!(
+            s1.liveness,
+            Liveness::Idle,
+            "a hook event that proves the session is dead must outrank the cwd guess"
+        );
+    }
+
+    #[test]
+    fn sessions_without_hook_events_still_use_the_cwd_inference() {
+        // Degrades to the previous behaviour rather than disappearing.
+        let (dir, store) = fixture();
+        let out = assemble_with_hooks(
+            dir.path(),
+            &store,
+            &["/live/repo".to_string()],
+            &Default::default(), // no hooks installed
+            &[],
+        );
+        let s1 = out.iter().find(|s| s.session_id == "s1").unwrap();
+        assert_eq!(s1.liveness, Liveness::Legacy);
     }
 
     #[test]

@@ -6,6 +6,7 @@ import { FilterBar } from "./components/FilterBar";
 import { SessionList } from "./components/SessionList";
 import { ConversationPane } from "./components/ConversationPane";
 import { DetailSlideOver } from "./components/DetailSlideOver";
+import { HookSettings } from "./components/HookSettings";
 import type { Annotation } from "./types";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -36,6 +37,7 @@ function Shell() {
   const [draft, setDraft] = useState<Annotation | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const shown = draft && selected ? { ...selected, annotation: draft } : selected;
 
   useEffect(() => {
@@ -81,6 +83,20 @@ function Shell() {
               onSelect={setSelectedId}
               versionBaseline={versionBaseline}
             />
+          )}
+        </div>
+        <div className="shrink-0 border-t border-neutral-800">
+          <button
+            type="button"
+            onClick={() => setShowSettings((v) => !v)}
+            className="w-full px-3 py-2 text-left text-[11px] text-neutral-500 hover:text-neutral-300"
+          >
+            {showSettings ? "▾" : "▸"} Settings
+          </button>
+          {showSettings && (
+            <div className="max-h-80 overflow-y-auto px-2 pb-2">
+              <HookSettings />
+            </div>
           )}
         </div>
       </aside>
