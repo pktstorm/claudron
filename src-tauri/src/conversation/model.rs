@@ -144,7 +144,12 @@ mod tests {
 
     #[test]
     fn delta_carries_a_reset_flag() {
-        let d = ConversationDelta { turns: vec![], updates: vec![], offset: 42, reset: true };
+        let d = ConversationDelta {
+            turns: vec![],
+            updates: vec![],
+            offset: 42,
+            reset: true,
+        };
         let j = serde_json::to_string(&d).unwrap();
         assert!(j.contains("\"reset\":true"));
         assert!(j.contains("\"offset\":42"));
@@ -163,7 +168,11 @@ mod tests {
 
     #[test]
     fn usage_still_serializes_camel_case_for_typescript() {
-        let u = Usage { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3 };
+        let u = Usage {
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_input_tokens: 3,
+        };
         let j = serde_json::to_string(&u).unwrap();
         assert!(j.contains("\"inputTokens\":1"), "got {j}");
         assert!(j.contains("\"outputTokens\":2"), "got {j}");

@@ -16,7 +16,10 @@ pub fn is_older(a: &str, b: &str) -> bool {
     let len = a.len().max(b.len());
     for i in 0..len {
         // A missing segment is 0, so "2.1" precedes "2.1.1".
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         if x != y {
             return x < y;
         }

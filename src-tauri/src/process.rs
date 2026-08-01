@@ -104,10 +104,8 @@ pub fn discover_claude_processes() -> Vec<LiveProcess> {
         .map(|pid| std::thread::spawn(move || (pid, cwd_for_pid(pid))))
         .collect();
 
-    let mut results: Vec<(i32, Option<String>)> = handles
-        .into_iter()
-        .filter_map(|h| h.join().ok())
-        .collect();
+    let mut results: Vec<(i32, Option<String>)> =
+        handles.into_iter().filter_map(|h| h.join().ok()).collect();
     results.sort_by_key(|(pid, _)| *pid);
 
     results
@@ -147,7 +145,10 @@ mod tests {
         let pids = parse_ps_output(SAMPLE);
         assert!(!pids.contains(&39509), "desktop app must not be listed");
         assert!(!pids.contains(&40174), "Electron helper must not be listed");
-        assert!(!pids.contains(&42241), "chrome native host must not be listed");
+        assert!(
+            !pids.contains(&42241),
+            "chrome native host must not be listed"
+        );
     }
 
     #[test]
@@ -165,7 +166,10 @@ mod tests {
         // Defense in depth: even if a bundled binary were named lowercase
         // `claude`, an .app/Contents path must never be treated as a CLI session.
         let out = "55555 /Applications/Claude.app/Contents/MacOS/claude\n";
-        assert!(parse_ps_output(out).is_empty(), "app-bundle path must be excluded");
+        assert!(
+            parse_ps_output(out).is_empty(),
+            "app-bundle path must be excluded"
+        );
     }
 
     #[test]
@@ -182,6 +186,10 @@ mod tests {
         let start = std::time::Instant::now();
         let got = lsof_cwd_with_timeout(999_999_9, std::time::Duration::from_secs(2));
         assert!(got.is_none());
-        assert!(start.elapsed() < std::time::Duration::from_secs(5), "took {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "took {:?}",
+            start.elapsed()
+        );
     }
 }
