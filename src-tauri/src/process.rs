@@ -184,7 +184,7 @@ mod tests {
     fn lsof_timeout_returns_none_rather_than_hanging() {
         // A pid that cannot resolve must return None quickly, not block.
         let start = std::time::Instant::now();
-        let got = lsof_cwd_with_timeout(999_999_9, std::time::Duration::from_secs(2));
+        let got = lsof_cwd_with_timeout(9_999_999, std::time::Duration::from_secs(2));
         assert!(got.is_none());
         assert!(
             start.elapsed() < std::time::Duration::from_secs(5),

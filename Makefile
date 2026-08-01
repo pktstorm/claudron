@@ -1,4 +1,4 @@
-.PHONY: dev build test test-rust test-ui lint
+.PHONY: dev build test test-rust test-ui lint lint-rust lint-ui fmt
 
 dev:
 	yarn tauri dev
@@ -14,6 +14,18 @@ test-rust:
 test-ui:
 	yarn vitest run
 
-lint:
-	cd src-tauri && cargo clippy -- -D warnings
+lint: lint-rust lint-ui
+
+# --all-targets lints test code too. Without it, warnings accumulate in tests
+# unnoticed -- which is exactly how two of them did.
+lint-rust:
+	cd src-tauri && cargo fmt --check
+	cd src-tauri && cargo clippy --all-targets -- -D warnings
+
+lint-ui:
 	yarn tsc --noEmit
+	yarn eslint .
+	yarn knip
+
+fmt:
+	cd src-tauri && cargo fmt

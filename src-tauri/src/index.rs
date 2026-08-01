@@ -326,7 +326,7 @@ mod tests {
         // assertion here made CI red roughly one run in ten once the suite began
         // looping. Failing loudly after every attempt straddles is still correct.
         let mut straddled = 0;
-        let (first, secs_first, secs_second) = loop {
+        loop {
             write("First");
             let secs_first = secs_of(&path);
             let first = index_sessions(dir.path());
@@ -338,7 +338,7 @@ mod tests {
             let secs_second = secs_of(&path);
 
             if secs_first == secs_second {
-                break (first, secs_first, secs_second);
+                break;
             }
             straddled += 1;
             assert!(
@@ -348,8 +348,7 @@ mod tests {
             );
             // Land the next attempt near the start of a second.
             std::thread::sleep(std::time::Duration::from_millis(120));
-        };
-        let _ = (secs_first, secs_second);
+        }
 
         let second = index_sessions(dir.path());
         assert_eq!(

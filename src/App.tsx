@@ -25,7 +25,10 @@ function Shell() {
     refetchInterval: 10000,
   });
 
-  const sessions = data?.sessions ?? [];
+  // Memoized because `?? []` allocates a fresh array whenever `data` is
+  // undefined, which would change the identity `visible` depends on and re-run
+  // applyFilters over every session on each render.
+  const sessions = useMemo(() => data?.sessions ?? [], [data]);
   const versionBaseline = data?.versionBaseline ?? null;
   const visible = useMemo(() => applyFilters(sessions, filters), [sessions, filters]);
   const selected = sessions.find((s) => s.sessionId === selectedId) ?? null;

@@ -36,7 +36,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -45,15 +45,30 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      # Cheap checks first: a lint failure should not wait on the test suites.
+      - name: Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
       - name: Typecheck
         run: yarn tsc --noEmit
+
+      - name: ESLint
+        run: yarn eslint .
+
+      # Unused files, exports, and dependencies. Caught a dependency that could
+      # never work (jest-dom without a vitest setupFile) on its first run.
+      - name: Knip
+        run: yarn knip
 
       - name: Frontend tests
         run: yarn vitest run
 
+      # --all-targets lints test code too; without it, warnings accumulate in
+      # tests unnoticed, which is exactly how two of them did.
       - name: Clippy
         working-directory: src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Rust tests
         working-directory: src-tauri

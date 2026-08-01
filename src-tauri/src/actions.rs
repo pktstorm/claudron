@@ -147,9 +147,9 @@ mod tests {
         let script = iterm_focus_script("/tmp/claudron-no-such-dir-zzz");
         let out = run_applescript(&script);
         // Either iTerm2 answers "not-found", or it is not installed and we get Err.
-        match out {
-            Ok(s) => assert_eq!(s, "not-found"),
-            Err(_) => {} // iTerm2 unavailable in this environment — acceptable
+        // Err means iTerm2 is unavailable in this environment, which is acceptable.
+        if let Ok(s) = out {
+            assert_eq!(s, "not-found");
         }
     }
 }
