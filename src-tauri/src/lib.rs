@@ -10,9 +10,78 @@ pub mod project;
 pub mod transcript;
 pub mod version;
 
+/// The label of the one window `tauri.conf.json` defines. Tray actions and the
+/// Dock-reopen handler both resolve the window by this label; a mismatch would
+/// leave the app running with no way to show it again.
+const MAIN_WINDOW: &str = "main";
+
+/// Show, unminimize, and focus the main window.
+///
+/// All three steps are needed. `show` alone leaves a window that was minimized
+/// before hiding still minimized, and without `set_focus` the window can appear
+/// behind whatever the user is looking at -- which reads as nothing happening.
+fn reveal_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    use tauri::WindowEvent;
+
     tauri::Builder::default()
+        .setup(|app| {
+            let show = MenuItem::with_id(app, "show", "Show Claudron", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Claudron", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            TrayIconBuilder::new()
+                .icon(tauri::image::Image::from_bytes(include_bytes!(
+                    "../icons/trayTemplate.png"
+                ))?)
+                // A macOS template icon is tinted by the system: black on a light
+                // menu bar, white on a dark one, and highlighted when the menu is
+                // open. Without this the artwork is drawn as-is and looks wrong in
+                // dark mode.
+                .icon_as_template(true)
+                .menu(&menu)
+                // The menu must NOT open on left click, or the show-on-click
+                // handler below never fires.
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => reveal_main_window(app),
+                    // Close only hides, so this is the deliberate way out.
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        reveal_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing hides rather than quits: Claudron is a monitor meant to stay
+            // running. Quitting would stop the poll loop and pay the ~10s cold scan
+            // again on next launch, when the user meant "get this out of my way".
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::list_sessions,
             commands::set_annotation,
@@ -25,8 +94,27 @@ pub fn run() {
             git::git_remote,
             git::remove_worktree,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // Clicking the Dock icon fires Reopen. Without handling it, a hidden
+            // window leaves the app running and unreachable -- worse than quitting,
+            // because there is no obvious way back.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                reveal_main_window(app);
+            }
+
+            // Hiding the last window must not end the process; that is the whole
+            // point of close-to-hide.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+
+            let _ = (app, event);
+        });
 }
 
 #[cfg(test)]
@@ -62,6 +150,34 @@ mod config_tests {
                  defines no window with that label (found {labels:?}). The app would \
                  launch with no window and no error."
             );
+        }
+    }
+
+    /// The tray icon must exist, be a real PNG, and be a macOS template image.
+    ///
+    /// A template image is tinted by the system using ONLY its alpha channel, so
+    /// every visible pixel must be black. Shipping colour art here renders as-is:
+    /// invisible against a dark menu bar and wrong when highlighted. Nothing else
+    /// checks this -- the asset lives on disk and the code just includes it.
+    #[test]
+    fn the_tray_icon_is_a_macos_template_image() {
+        const TRAY: &[u8] = include_bytes!("../icons/trayTemplate.png");
+
+        assert_eq!(&TRAY[..8], b"\x89PNG\r\n\x1a\n", "tray icon must be a PNG");
+
+        // IHDR: width and height are big-endian u32 at bytes 16..24.
+        let w = u32::from_be_bytes(TRAY[16..20].try_into().unwrap());
+        let h = u32::from_be_bytes(TRAY[20..24].try_into().unwrap());
+        assert_eq!((w, h), (22, 22), "menu-bar icons are 22x22 at 1x");
+
+        // Colour type 6 = RGBA. Alpha is what the system tints; an opaque format
+        // (type 2, RGB) would have no shape to tint.
+        assert_eq!(TRAY[25], 6, "tray icon must carry an alpha channel (RGBA)");
+
+        for scale in ["@2x", "@3x"] {
+            let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("icons/trayTemplate{scale}.png"));
+            assert!(p.exists(), "missing retina tray asset: {}", p.display());
         }
     }
 
