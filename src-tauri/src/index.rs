@@ -159,16 +159,16 @@ mod tests {
         fs::create_dir_all(&proj).unwrap();
 
         let mut a = fs::File::create(proj.join("aaa.jsonl")).unwrap();
-        writeln!(a, r#"{{"type":"user","entrypoint":"cli","sessionId":"aaa","cwd":"/Users/s/code/repo","gitBranch":"main"}}"#).unwrap();
+        writeln!(a, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"aaa","cwd":"/Users/s/code/repo","gitBranch":"main"}}"#).unwrap();
         writeln!(a, r#"{{"type":"ai-title","aiTitle":"Session A","sessionId":"aaa"}}"#).unwrap();
 
         let mut b = fs::File::create(proj.join("bbb.jsonl")).unwrap();
-        writeln!(b, r#"{{"type":"user","entrypoint":"sdk-py","sessionId":"bbb","cwd":"/Users/s/code/repo"}}"#).unwrap();
+        writeln!(b, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"sdk-py","sessionId":"bbb","cwd":"/Users/s/code/repo"}}"#).unwrap();
 
         let wt = dir.path().join("-Users-s-code-repo--worktrees-feat");
         fs::create_dir_all(&wt).unwrap();
         let mut c = fs::File::create(wt.join("ccc.jsonl")).unwrap();
-        writeln!(c, r#"{{"type":"user","entrypoint":"cli","sessionId":"ccc","cwd":"/Users/s/code/repo/worktrees/feat","interruptedByShutdown":true}}"#).unwrap();
+        writeln!(c, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"ccc","cwd":"/Users/s/code/repo/worktrees/feat","interruptedByShutdown":true}}"#).unwrap();
 
         dir
     }
@@ -253,7 +253,7 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("s.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
         writeln!(f, r#"{{"type":"ai-title","aiTitle":"First","sessionId":"s"}}"#).unwrap();
         drop(f);
         let first = index_sessions(dir.path());
@@ -262,7 +262,7 @@ mod tests {
         // Rewrite with a new title and a distinctly newer mtime.
         std::thread::sleep(std::time::Duration::from_millis(1100));
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
         writeln!(f, r#"{{"type":"ai-title","aiTitle":"Second","sessionId":"s"}}"#).unwrap();
         drop(f);
         let second = index_sessions(dir.path());
@@ -279,7 +279,7 @@ mod tests {
 
         let write = |title: &str| {
             let mut f = std::fs::File::create(&path).unwrap();
-            writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#).unwrap();
+            writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#).unwrap();
             writeln!(f, r#"{{"type":"ai-title","aiTitle":"{title}","sessionId":"fast"}}"#).unwrap();
         };
 
@@ -292,29 +292,42 @@ mod tests {
                 .unwrap_or(0)
         };
 
-        write("First");
-        let secs_first = secs_of(&path);
-        let first = index_sessions(dir.path());
-        assert_eq!(first[0].ai_title.as_deref(), Some("First"));
+        // The premise is that both writes land in the same wall-clock second --
+        // otherwise the test would pass even against a seconds-only key, which
+        // is a silent flaky-green. Straddling a second boundary is a property of
+        // WHEN the test ran, not of the code, so retry rather than fail: a hard
+        // assertion here made CI red roughly one run in ten once the suite began
+        // looping. Failing loudly after every attempt straddles is still correct.
+        let mut straddled = 0;
+        let (first, secs_first, secs_second) = loop {
+            write("First");
+            let secs_first = secs_of(&path);
+            let first = index_sessions(dir.path());
+            assert_eq!(first[0].ai_title.as_deref(), Some("First"));
 
-        // No sleep: this rewrite lands in the same wall-clock second, which is
-        // what an actively-streaming session does constantly.
-        write("Second Title Is Longer");
-        let secs_second = secs_of(&path);
+            // No sleep: this rewrite lands in the same wall-clock second, which
+            // is what an actively-streaming session does constantly.
+            write("Secnd");
+            let secs_second = secs_of(&path);
 
-        // Guard the test's own premise. If the two writes straddled a second
-        // boundary, this test would pass even against a seconds-only key --
-        // a silent flaky-green. Fail loudly instead.
-        assert_eq!(
-            secs_first, secs_second,
-            "test premise broken: writes landed in different seconds, so this run \
-             cannot discriminate the bug"
-        );
+            if secs_first == secs_second {
+                break (first, secs_first, secs_second);
+            }
+            straddled += 1;
+            assert!(
+                straddled < 20,
+                "writes straddled a second boundary 20 times running -- the clock \
+                 or filesystem is behaving unexpectedly, not a flake"
+            );
+            // Land the next attempt near the start of a second.
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        };
+        let _ = (secs_first, secs_second);
 
         let second = index_sessions(dir.path());
         assert_eq!(
             second[0].ai_title.as_deref(),
-            Some("Second Title Is Longer"),
+            Some("Secnd"),
             "a same-second rewrite must still be re-parsed"
         );
     }
@@ -327,7 +340,7 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("gone.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#).unwrap();
         drop(f);
         assert_eq!(index_sessions(dir.path()).len(), 1);
         std::fs::remove_file(&path).unwrap();

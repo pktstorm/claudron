@@ -103,9 +103,9 @@ mod tests {
         let proj = dir.path().join("proj");
         fs::create_dir_all(&proj).unwrap();
         let mut f = fs::File::create(proj.join("s1.jsonl")).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s1","cwd":"/live/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s1","cwd":"/live/repo"}}"#).unwrap();
         let mut g = fs::File::create(proj.join("s2.jsonl")).unwrap();
-        writeln!(g, r#"{{"type":"user","entrypoint":"cli","sessionId":"s2","cwd":"/dead/repo"}}"#).unwrap();
+        writeln!(g, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s2","cwd":"/dead/repo"}}"#).unwrap();
         let store = dir.path().join("annotations.json");
         (dir, store)
     }
@@ -170,7 +170,7 @@ mod tests {
         let mut f = fs::File::create(proj.join("s1.jsonl")).unwrap();
         writeln!(
             f,
-            r#"{{"type":"user","entrypoint":"cli","sessionId":"s1","cwd":{:?}}}"#,
+            r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s1","cwd":{:?}}}"#,
             uncanonical_cwd
         )
         .unwrap();
