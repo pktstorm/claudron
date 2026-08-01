@@ -73,10 +73,17 @@ function Shell() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void onScanProgress((p) => setSplashProgress(scanFraction(p))).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
+    onScanProgress((p) => setSplashProgress(scanFraction(p)))
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      // Subscribing can fail — outside Tauri (tests, a browser dev server)
+      // there is no event bridge at all. A progress bar is decoration; failing
+      // to subscribe must never take the app down or surface as an unhandled
+      // rejection. The splash still dismisses, because that is driven by the
+      // query, not by this.
+      .catch(() => {});
     return () => {
       cancelled = true;
       unlisten?.();
