@@ -17,18 +17,22 @@ pub struct TailRead {
 /// Only complete newline-terminated lines are consumed. A transcript being
 /// appended to right now can end mid-line; parsing that would render a torn
 /// record, and advancing past it would lose the line entirely.
-pub fn read_from(
-    path: &Path,
-    offset: u64,
-    pending: PendingCalls,
-) -> std::io::Result<TailRead> {
+pub fn read_from(path: &Path, offset: u64, pending: PendingCalls) -> std::io::Result<TailRead> {
     let len = std::fs::metadata(path)?.len();
 
     // A shorter file means truncation or replacement: start over, and drop the
     // carried pending state -- its indices refer to turns the client is about
     // to discard.
-    let (start, reset) = if len < offset { (0, true) } else { (offset, false) };
-    let carried = if reset { PendingCalls::default() } else { pending };
+    let (start, reset) = if len < offset {
+        (0, true)
+    } else {
+        (offset, false)
+    };
+    let carried = if reset {
+        PendingCalls::default()
+    } else {
+        pending
+    };
 
     let mut file = std::fs::File::open(path)?;
     file.seek(SeekFrom::Start(start))?;
@@ -95,7 +99,10 @@ mod tests {
         let r = read_from(&p, first.offset, first.pending).unwrap();
         let (turns, offset2, reset) = (r.turns, r.offset, r.reset);
         let offset = first.offset;
-        assert!(turns.is_empty(), "an unchanged file must yield no new turns");
+        assert!(
+            turns.is_empty(),
+            "an unchanged file must yield no new turns"
+        );
         assert_eq!(offset2, offset);
         assert!(!reset);
     }
@@ -137,7 +144,12 @@ mod tests {
 
     #[test]
     fn a_missing_file_is_an_error_not_a_panic() {
-        assert!(read_from(std::path::Path::new("/nonexistent/x.jsonl"), 0, PendingCalls::default()).is_err());
+        assert!(read_from(
+            std::path::Path::new("/nonexistent/x.jsonl"),
+            0,
+            PendingCalls::default()
+        )
+        .is_err());
     }
 
     #[test]
@@ -196,7 +208,11 @@ mod tests {
         }
         // Find the largest depth-2 transcript.
         let mut biggest: Option<(u64, std::path::PathBuf)> = None;
-        for e in walkdir::WalkDir::new(&root).max_depth(2).into_iter().filter_map(Result::ok) {
+        for e in walkdir::WalkDir::new(&root)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             if e.path().extension().and_then(|x| x.to_str()) != Some("jsonl") {
                 continue;
             }
@@ -218,7 +234,10 @@ mod tests {
             cold.turns.len(),
             warm.turns.len()
         );
-        assert!(warm.turns.is_empty(), "an unchanged file must yield no new turns");
+        assert!(
+            warm.turns.is_empty(),
+            "an unchanged file must yield no new turns"
+        );
         assert!(
             elapsed < std::time::Duration::from_millis(50),
             "warm poll took {elapsed:?}, criterion 2 requires under 50ms"

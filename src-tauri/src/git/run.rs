@@ -83,7 +83,10 @@ pub fn run(
     if status.success() {
         Ok(stdout)
     } else {
-        Err(RunError::Failed { code: status.code(), stderr: stderr.trim().to_string() })
+        Err(RunError::Failed {
+            code: status.code(),
+            stderr: stderr.trim().to_string(),
+        })
     }
 }
 
@@ -101,16 +104,26 @@ mod tests {
     #[test]
     fn a_missing_program_is_a_spawn_error() {
         let d = tempfile::tempdir().unwrap();
-        let e = run("claudron-no-such-program", &[], d.path(), Duration::from_secs(5))
-            .unwrap_err();
+        let e = run(
+            "claudron-no-such-program",
+            &[],
+            d.path(),
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
         assert!(matches!(e, RunError::Spawn(_)), "got {e:?}");
     }
 
     #[test]
     fn a_nonzero_exit_carries_stderr_verbatim() {
         let d = tempfile::tempdir().unwrap();
-        let e = run("sh", &["-c", "echo bad things >&2; exit 3"], d.path(), Duration::from_secs(5))
-            .unwrap_err();
+        let e = run(
+            "sh",
+            &["-c", "echo bad things >&2; exit 3"],
+            d.path(),
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
         match e {
             RunError::Failed { code, stderr } => {
                 assert_eq!(code, Some(3));
@@ -154,7 +167,11 @@ mod tests {
             Duration::from_secs(10),
         )
         .expect("a large but successful command must not time out");
-        assert!(out.len() > 1_000_000, "expected ~1MB, got {} bytes", out.len());
+        assert!(
+            out.len() > 1_000_000,
+            "expected ~1MB, got {} bytes",
+            out.len()
+        );
     }
 
     #[test]
@@ -170,7 +187,11 @@ mod tests {
         .unwrap_err();
         match e {
             RunError::Failed { stderr, .. } => {
-                assert!(stderr.len() > 1_000_000, "expected ~1MB, got {}", stderr.len())
+                assert!(
+                    stderr.len() > 1_000_000,
+                    "expected ~1MB, got {}",
+                    stderr.len()
+                )
             }
             other => panic!("expected Failed with large stderr, got {other:?}"),
         }

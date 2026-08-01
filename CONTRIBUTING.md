@@ -21,10 +21,22 @@ make dev
 
 ```bash
 make test   # Rust and frontend suites
-make lint   # clippy -D warnings, then tsc --noEmit
+make lint   # formatting, typecheck, clippy, eslint, knip
+make fmt    # apply rustfmt
 ```
 
-Both must pass. `make lint` runs clippy with `-D warnings`, so warnings fail the build.
+Both must pass. Specifically, `make lint` runs:
+
+| Check | What it catches |
+|---|---|
+| `cargo fmt --check` | Unformatted Rust |
+| `cargo clippy --all-targets -D warnings` | Lint issues, **including in test code** |
+| `tsc --noEmit` | Type errors |
+| `eslint .` | Hook dependencies, `\|\|` where `??` was meant, unused vars |
+| `knip` | Unused files, exports, and dependencies |
+
+Warnings fail the build on the Rust side. `--all-targets` is deliberate: without it,
+warnings accumulate in test code unnoticed, which is exactly how two of them did.
 
 Some tests are `#[ignore]`d because they need a real git repository with a real GitHub remote.
 Point them at one rather than hardcoding a path:

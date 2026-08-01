@@ -49,12 +49,11 @@ fn compute_is_worktree(common_dir_ok: bool, toplevel: &str, repo_root: &str) -> 
 
 pub fn inspect(cwd: &Path) -> Result<GitLocal, String> {
     // Any git command fails outside a repo; use the cheapest as the gate.
-    let inside = git(cwd, &["rev-parse", "--is-inside-work-tree"])
-        .map_err(|e| match e {
-            RunError::Failed { stderr, .. } if !stderr.is_empty() => stderr,
-            RunError::Timeout => "git timed out".to_string(),
-            other => format!("{other:?}"),
-        })?;
+    let inside = git(cwd, &["rev-parse", "--is-inside-work-tree"]).map_err(|e| match e {
+        RunError::Failed { stderr, .. } if !stderr.is_empty() => stderr,
+        RunError::Timeout => "git timed out".to_string(),
+        other => format!("{other:?}"),
+    })?;
     if inside.trim() != "true" {
         return Err("not a git working tree".into());
     }
@@ -68,7 +67,10 @@ pub fn inspect(cwd: &Path) -> Result<GitLocal, String> {
         .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count() as u32)
         .unwrap_or(0);
 
-    let (ahead, behind) = match git(cwd, &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]) {
+    let (ahead, behind) = match git(
+        cwd,
+        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+    ) {
         Ok(out) => match parse_ahead_behind(&out) {
             Some((a, b)) => (Some(a), Some(b)),
             None => (None, None),
@@ -79,7 +81,11 @@ pub fn inspect(cwd: &Path) -> Result<GitLocal, String> {
 
     // ALWAYS --path-format=absolute: --git-common-dir alone returns a relative
     // ".git" from a main checkout and an absolute path from a worktree.
-    let common_dir_ok = git(cwd, &["rev-parse", "--path-format=absolute", "--git-common-dir"]).ok();
+    let common_dir_ok = git(
+        cwd,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .ok();
     let common = common_dir_ok
         .as_deref()
         .map(|s| s.trim().to_string())
@@ -89,17 +95,23 @@ pub fn inspect(cwd: &Path) -> Result<GitLocal, String> {
         .unwrap_or(common.trim_end_matches(".git").trim_end_matches('/'))
         .to_string();
 
-    let toplevel = git(cwd, &["rev-parse", "--path-format=absolute", "--show-toplevel"])
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| cwd.to_string_lossy().to_string());
+    let toplevel = git(
+        cwd,
+        &["rev-parse", "--path-format=absolute", "--show-toplevel"],
+    )
+    .map(|s| s.trim().to_string())
+    .unwrap_or_else(|_| cwd.to_string_lossy().to_string());
 
     let is_worktree = compute_is_worktree(common_dir_ok.is_some(), &toplevel, &repo_root);
 
-    let default_branch = git(cwd, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
-        .ok()
-        .map(|s| s.trim().trim_start_matches("origin/").to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| Some("main".to_string()));
+    let default_branch = git(
+        cwd,
+        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .ok()
+    .map(|s| s.trim().trim_start_matches("origin/").to_string())
+    .filter(|s| !s.is_empty())
+    .or_else(|| Some("main".to_string()));
 
     let merged_into_default = match (&branch, &default_branch) {
         (Some(b), Some(d)) if b != d => git(cwd, &["branch", "--merged", d])
@@ -113,7 +125,11 @@ pub fn inspect(cwd: &Path) -> Result<GitLocal, String> {
         dirty_count,
         ahead,
         behind,
-        worktree: WorktreeInfo { is_worktree, path: toplevel, repo_root },
+        worktree: WorktreeInfo {
+            is_worktree,
+            path: toplevel,
+            repo_root,
+        },
         default_branch,
         merged_into_default,
     })
@@ -195,13 +211,17 @@ mod tests {
         // symlink, so canonicalize both sides or they will never compare equal.
         let expected = d.path().canonicalize().unwrap();
         assert_eq!(
-            std::path::Path::new(&g.worktree.repo_root).canonicalize().unwrap(),
+            std::path::Path::new(&g.worktree.repo_root)
+                .canonicalize()
+                .unwrap(),
             expected,
             "repo_root must be the main checkout itself, got {:?}",
             g.worktree.repo_root
         );
         assert_eq!(
-            std::path::Path::new(&g.worktree.path).canonicalize().unwrap(),
+            std::path::Path::new(&g.worktree.path)
+                .canonicalize()
+                .unwrap(),
             expected,
             "path must be the main checkout itself, got {:?}",
             g.worktree.path
@@ -215,7 +235,14 @@ mod tests {
         let wt = d.path().join("wt");
         run(
             "git",
-            &["worktree", "add", "-q", "-b", "feature", wt.to_str().unwrap()],
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feature",
+                wt.to_str().unwrap(),
+            ],
             d.path(),
             GIT_TIMEOUT,
         )
@@ -229,13 +256,17 @@ mod tests {
         // directories. A bug that conflated the two would previously slip
         // past a starts_with('/') check.
         assert_eq!(
-            std::path::Path::new(&g.worktree.repo_root).canonicalize().unwrap(),
+            std::path::Path::new(&g.worktree.repo_root)
+                .canonicalize()
+                .unwrap(),
             d.path().canonicalize().unwrap(),
             "repo_root must be the parent repo, got {:?}",
             g.worktree.repo_root
         );
         assert_eq!(
-            std::path::Path::new(&g.worktree.path).canonicalize().unwrap(),
+            std::path::Path::new(&g.worktree.path)
+                .canonicalize()
+                .unwrap(),
             wt.canonicalize().unwrap(),
             "path must be the worktree itself, got {:?}",
             g.worktree.path
@@ -262,10 +293,22 @@ mod tests {
     /// pins the default branch name explicitly via `-b main`, so this is not
     /// dependent on the machine's `init.defaultBranch`.
     fn branch_off_default(d: &tempfile::TempDir, name: &str) {
-        run("git", &["checkout", "-q", "-b", name], d.path(), GIT_TIMEOUT).unwrap();
+        run(
+            "git",
+            &["checkout", "-q", "-b", name],
+            d.path(),
+            GIT_TIMEOUT,
+        )
+        .unwrap();
         std::fs::write(d.path().join("feature.txt"), b"work").unwrap();
         run("git", &["add", "."], d.path(), GIT_TIMEOUT).unwrap();
-        run("git", &["commit", "-q", "-m", "feature work"], d.path(), GIT_TIMEOUT).unwrap();
+        run(
+            "git",
+            &["commit", "-q", "-m", "feature work"],
+            d.path(),
+            GIT_TIMEOUT,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -310,7 +353,13 @@ mod tests {
         // merged" (Some(false)), only as unknown.
         let d = init_repo();
         branch_off_default(&d, "feature");
-        run("git", &["checkout", "-q", "--detach"], d.path(), GIT_TIMEOUT).unwrap();
+        run(
+            "git",
+            &["checkout", "-q", "--detach"],
+            d.path(),
+            GIT_TIMEOUT,
+        )
+        .unwrap();
 
         let g = inspect(d.path()).unwrap();
         assert_eq!(g.branch, None, "detached HEAD has no branch name");
@@ -351,8 +400,14 @@ mod tests {
             "a failed lookup must yield false regardless of what the paths look like"
         );
         // Sanity: the ordinary cases still behave once the lookup succeeds.
-        assert!(!compute_is_worktree(true, "/repo", "/repo"), "same path is a main checkout");
-        assert!(compute_is_worktree(true, "/repo/wt", "/repo"), "differing paths is a worktree");
+        assert!(
+            !compute_is_worktree(true, "/repo", "/repo"),
+            "same path is a main checkout"
+        );
+        assert!(
+            compute_is_worktree(true, "/repo/wt", "/repo"),
+            "differing paths is a worktree"
+        );
     }
 
     /// Times `inspect` against a real checkout, to catch costs that only appear

@@ -20,7 +20,7 @@ export function applyDelta(
   incoming: Turn[],
   updates: ToolResultUpdate[],
 ): Turn[] {
-  let next = updates.length === 0 ? prev : prev.map((t) => {
+  const next = updates.length === 0 ? prev : prev.map((t) => {
     const hit = t.blocks.some(
       (b) => b.kind === "tool" && updates.some((u) => u.toolUseId === b.call.id),
     );

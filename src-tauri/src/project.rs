@@ -7,7 +7,11 @@
 pub fn project_label(cwd: &str) -> String {
     let trimmed = cwd.trim_end_matches('/');
     if trimmed.is_empty() {
-        return if cwd.starts_with('/') { "/".into() } else { "unknown".into() };
+        return if cwd.starts_with('/') {
+            "/".into()
+        } else {
+            "unknown".into()
+        };
     }
 
     let parts: Vec<&str> = trimmed.split('/').filter(|p| !p.is_empty()).collect();

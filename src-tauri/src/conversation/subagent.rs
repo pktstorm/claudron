@@ -59,7 +59,9 @@ mod tests {
         let got = subagent_path(t, "a07d46a9f4d4d19bd");
         assert_eq!(
             got,
-            PathBuf::from("/p/-Users-s-code-repo/5f34a680-16f5/subagents/agent-a07d46a9f4d4d19bd.jsonl")
+            PathBuf::from(
+                "/p/-Users-s-code-repo/5f34a680-16f5/subagents/agent-a07d46a9f4d4d19bd.jsonl"
+            )
         );
     }
 
@@ -78,7 +80,11 @@ mod tests {
         }
         // Find a session directory that has a subagents/ child.
         let mut checked = 0;
-        for e in walkdir::WalkDir::new(&root).max_depth(3).into_iter().filter_map(Result::ok) {
+        for e in walkdir::WalkDir::new(&root)
+            .max_depth(3)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             if !e.path().ends_with("subagents") || !e.path().is_dir() {
                 continue;
             }
@@ -90,9 +96,7 @@ mod tests {
                 // Every transcript has a `.meta.json` sidecar beside it (1605
                 // sidecars vs 1598 transcripts across the tree). Only the
                 // .jsonl files are transcripts.
-                .filter(|f| {
-                    f.path().extension().and_then(|x| x.to_str()) == Some("jsonl")
-                })
+                .filter(|f| f.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
                 .collect();
             for f in files.iter().take(3) {
                 let name = f.file_name().to_string_lossy().to_string();
