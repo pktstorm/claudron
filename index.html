@@ -5,9 +5,68 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Claudron</title>
+    <!--
+      The splash is styled inline and preloaded, deliberately.
+
+      Everything here must render on the FIRST paint. A stylesheet is a separate
+      request the webview blocks on, and anything React-owned cannot help at all:
+      until main.tsx executes, <body> is empty and the webview paints its own
+      default white. That white -- not the session scan -- is what made launch
+      look broken.
+
+      The scan itself is the duration: a cold index of the real tree measured
+      11.6s for 38 sessions across ~1461 transcripts. That is what the splash
+      covers, and why it cannot be a spinner that appears late.
+    -->
+    <link rel="preload" as="image" href="/splash.jpg" />
+    <style>
+      /* Painted before the webview has any of our CSS. Matches the window's
+         own backgroundColor (#171717) and the splash art's near-black edges,
+         so there is no flash between window, splash, and app. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #171717;
+      }
+
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #171717;
+        /* Fades out once React signals it has content. Removed from the DOM
+           afterwards so it can never intercept a click. */
+        transition: opacity 400ms ease;
+      }
+
+      #splash.claudron-hiding {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #splash img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      /* Honour a reduced-motion preference: hide immediately rather than fade. */
+      @media (prefers-reduced-motion: reduce) {
+        #splash {
+          transition: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
+    <div id="splash">
+      <img src="/splash.jpg" alt="Claudron" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

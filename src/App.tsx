@@ -7,6 +7,7 @@ import { SessionList } from "./components/SessionList";
 import { ConversationPane } from "./components/ConversationPane";
 import { DetailSlideOver } from "./components/DetailSlideOver";
 import { HookSettings } from "./components/HookSettings";
+import { dismissSplash } from "./splash";
 import type { Annotation } from "./types";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -52,6 +53,17 @@ function Shell() {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, []);
+
+  // Dismiss the launch splash once the first scan resolves -- or fails. Driven
+  // by the query rather than a timer, because the scan's duration depends on
+  // how many transcripts exist (11.6s measured on a real tree, ~19ms warm), so
+  // any fixed delay would be wrong on one machine or the other. Dismissing on
+  // `error` too matters: a failed scan must not leave the splash up forever,
+  // hiding the error message underneath it.
+  const settled = !isLoading || !!error;
+  useEffect(() => {
+    if (settled) dismissSplash();
+  }, [settled]);
 
   function onAnnotationChange(a: Annotation) {
     if (!selected) return;
