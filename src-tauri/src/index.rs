@@ -159,16 +159,16 @@ mod tests {
         fs::create_dir_all(&proj).unwrap();
 
         let mut a = fs::File::create(proj.join("aaa.jsonl")).unwrap();
-        writeln!(a, r#"{{"type":"user","entrypoint":"cli","sessionId":"aaa","cwd":"/Users/s/code/repo","gitBranch":"main"}}"#).unwrap();
+        writeln!(a, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"aaa","cwd":"/Users/s/code/repo","gitBranch":"main"}}"#).unwrap();
         writeln!(a, r#"{{"type":"ai-title","aiTitle":"Session A","sessionId":"aaa"}}"#).unwrap();
 
         let mut b = fs::File::create(proj.join("bbb.jsonl")).unwrap();
-        writeln!(b, r#"{{"type":"user","entrypoint":"sdk-py","sessionId":"bbb","cwd":"/Users/s/code/repo"}}"#).unwrap();
+        writeln!(b, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"sdk-py","sessionId":"bbb","cwd":"/Users/s/code/repo"}}"#).unwrap();
 
         let wt = dir.path().join("-Users-s-code-repo--worktrees-feat");
         fs::create_dir_all(&wt).unwrap();
         let mut c = fs::File::create(wt.join("ccc.jsonl")).unwrap();
-        writeln!(c, r#"{{"type":"user","entrypoint":"cli","sessionId":"ccc","cwd":"/Users/s/code/repo/worktrees/feat","interruptedByShutdown":true}}"#).unwrap();
+        writeln!(c, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"ccc","cwd":"/Users/s/code/repo/worktrees/feat","interruptedByShutdown":true}}"#).unwrap();
 
         dir
     }
@@ -253,7 +253,7 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("s.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
         writeln!(f, r#"{{"type":"ai-title","aiTitle":"First","sessionId":"s"}}"#).unwrap();
         drop(f);
         let first = index_sessions(dir.path());
@@ -262,7 +262,7 @@ mod tests {
         // Rewrite with a new title and a distinctly newer mtime.
         std::thread::sleep(std::time::Duration::from_millis(1100));
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s","cwd":"/repo"}}"#).unwrap();
         writeln!(f, r#"{{"type":"ai-title","aiTitle":"Second","sessionId":"s"}}"#).unwrap();
         drop(f);
         let second = index_sessions(dir.path());
@@ -279,7 +279,7 @@ mod tests {
 
         let write = |title: &str| {
             let mut f = std::fs::File::create(&path).unwrap();
-            writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#).unwrap();
+            writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"fast","cwd":"/repo"}}"#).unwrap();
             writeln!(f, r#"{{"type":"ai-title","aiTitle":"{title}","sessionId":"fast"}}"#).unwrap();
         };
 
@@ -327,7 +327,7 @@ mod tests {
         std::fs::create_dir_all(&proj).unwrap();
         let path = proj.join("gone.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
-        writeln!(f, r#"{{"type":"user","entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#).unwrap();
+        writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"gone","cwd":"/repo"}}"#).unwrap();
         drop(f);
         assert_eq!(index_sessions(dir.path()).len(), 1);
         std::fs::remove_file(&path).unwrap();
