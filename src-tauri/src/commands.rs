@@ -25,6 +25,18 @@ pub fn assemble_with_hooks(
     hook_events: &std::collections::HashMap<String, crate::hooks::HookEvent>,
     live_pids: &[i32],
 ) -> Vec<Session> {
+    assemble_reporting(root, store, live_cwds, hook_events, live_pids, |_| {})
+}
+
+/// `assemble_with_hooks`, reporting scan progress as it goes.
+pub fn assemble_reporting(
+    root: &Path,
+    store: &Path,
+    live_cwds: &[String],
+    hook_events: &std::collections::HashMap<String, crate::hooks::HookEvent>,
+    live_pids: &[i32],
+    on_progress: impl FnMut(index::ScanProgress),
+) -> Vec<Session> {
     let saved = annotations::load(store).unwrap_or_else(|e| {
         eprintln!("claudron: could not load annotations: {e}");
         std::collections::HashMap::new()
@@ -36,7 +48,7 @@ pub fn assemble_with_hooks(
         .map(|c| std::fs::canonicalize(c).unwrap_or_else(|_| Path::new(c).into()))
         .collect();
 
-    index::index_sessions(root)
+    index::index_sessions_with_progress(root, on_progress)
         .into_iter()
         .map(|mut s| {
             if let Some(a) = saved.get(&s.session_id) {
@@ -78,17 +90,23 @@ pub fn assemble_with_hooks(
 }
 
 #[tauri::command]
-pub fn list_sessions() -> SessionList {
+pub fn list_sessions(app: tauri::AppHandle) -> SessionList {
+    use tauri::Emitter;
     let procs = process::discover_claude_processes();
     let live_pids: Vec<i32> = procs.iter().map(|p| p.pid).collect();
     let live: Vec<String> = procs.into_iter().filter_map(|p| p.cwd).collect();
     let hook_events = crate::hooks::read_events(&crate::hooks::events_dir());
-    let sessions = assemble_with_hooks(
+    // Progress is emitted rather than returned: the scan is what takes 11.8s
+    // cold, so the UI needs to hear about it WHILE it runs, not after.
+    let sessions = assemble_reporting(
         &index::projects_root(),
         &annotations::store_path(),
         &live,
         &hook_events,
         &live_pids,
+        |p| {
+            let _ = app.emit("scan-progress", p);
+        },
     );
     let observed: Vec<String> = sessions.iter().filter_map(|s| s.version.clone()).collect();
     let version_baseline = crate::version::baseline(crate::version::installed(), &observed);

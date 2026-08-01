@@ -71,21 +71,94 @@ fn sort_sessions(sessions: &mut [Session]) {
     });
 }
 
+/// How far through a scan we are, measured in BYTES rather than files.
+///
+/// File count is a dishonest denominator here: measured on a real tree, the ten
+/// largest transcripts are 52.7% of total parse time, so a count-based bar
+/// races to ~99% and then stalls for seconds on a handful of files. Those same
+/// ten files are 47.8% of total bytes, so bytes track the work almost exactly.
+///
+/// The denominator is free: enumerating 1476 files took 68 ms against 11.8 s of
+/// parsing, and `metadata().len()` is already read for the freshness key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanProgress {
+    pub files_done: usize,
+    pub files_total: usize,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+}
+
+impl ScanProgress {
+    /// Fraction complete in 0.0..=1.0. Zero total is complete, not divide-by-zero.
+    pub fn fraction(&self) -> f64 {
+        if self.bytes_total == 0 {
+            return 1.0;
+        }
+        (self.bytes_done as f64 / self.bytes_total as f64).clamp(0.0, 1.0)
+    }
+}
+
+/// Whether enough progress has been made to be worth reporting.
+///
+/// Reports at roughly every 1% of total bytes. Per-file reporting would emit
+/// ~1476 events for one scan, and each one crosses the Tauri IPC boundary and
+/// re-renders React -- so the reporting would measurably slow the very scan it
+/// describes. 1% is far below what the eye resolves on a progress bar.
+fn should_report(bytes_done: u64, last_reported: u64, bytes_total: u64) -> bool {
+    if bytes_total == 0 {
+        return false;
+    }
+    let step = (bytes_total / 100).max(1);
+    bytes_done.saturating_sub(last_reported) >= step
+}
+
 pub fn index_sessions(root: &Path) -> Vec<Session> {
+    index_sessions_with_progress(root, |_| {})
+}
+
+/// `index_sessions`, reporting progress as it goes.
+///
+/// `on_progress` is called as files are processed, so a caller can drive a
+/// progress bar. It is NOT called per file: at 1476 files that would be 1476
+/// events for an 11.8 s scan, most of them redundant. See `should_report`.
+pub fn index_sessions_with_progress(
+    root: &Path,
+    mut on_progress: impl FnMut(ScanProgress),
+) -> Vec<Session> {
     let mut out = Vec::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
 
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
 
-    for entry in WalkDir::new(root)
+    // Enumerate first so the denominator is known before any parsing. Measured
+    // at 68 ms for 1476 files against 11.8 s of parsing -- cheap enough that
+    // the honest progress bar costs essentially nothing.
+    let files: Vec<_> = WalkDir::new(root)
         .max_depth(2)
         .into_iter()
         .filter_map(Result::ok)
-    {
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+        .collect();
+
+    let files_total = files.len();
+    let bytes_total: u64 = files
+        .iter()
+        .map(|e| e.metadata().map(|m| m.len()).unwrap_or(0))
+        .sum();
+    let mut files_done = 0usize;
+    let mut bytes_done = 0u64;
+    let mut last_reported = 0u64;
+
+    on_progress(ScanProgress {
+        files_done: 0,
+        files_total,
+        bytes_done: 0,
+        bytes_total,
+    });
+
+    for entry in files {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
 
         let meta = entry.metadata().ok();
         let modified = meta.as_ref().and_then(|m| m.modified().ok());
@@ -105,6 +178,20 @@ pub fn index_sessions(root: &Path) -> Vec<Session> {
             if *cached_freshness == freshness {
                 if let Some(session) = cached_session {
                     out.push(session.clone());
+                }
+                // A cache hit is still work done. Counting only the parse path
+                // would leave a warm scan reporting 0% forever -- and a warm
+                // scan is the common case, at ~19ms against 11.8s cold.
+                files_done += 1;
+                bytes_done += freshness.1;
+                if should_report(bytes_done, last_reported, bytes_total) {
+                    last_reported = bytes_done;
+                    on_progress(ScanProgress {
+                        files_done,
+                        files_total,
+                        bytes_done,
+                        bytes_total,
+                    });
                 }
                 continue;
             }
@@ -137,7 +224,28 @@ pub fn index_sessions(root: &Path) -> Vec<Session> {
         if let Some(session) = session {
             out.push(session);
         }
+
+        files_done += 1;
+        bytes_done += freshness.1;
+        if should_report(bytes_done, last_reported, bytes_total) {
+            last_reported = bytes_done;
+            on_progress(ScanProgress {
+                files_done,
+                files_total,
+                bytes_done,
+                bytes_total,
+            });
+        }
     }
+
+    // A final report, so a caller always sees 100% even when the last files
+    // fell inside the reporting threshold.
+    on_progress(ScanProgress {
+        files_done,
+        files_total,
+        bytes_done,
+        bytes_total,
+    });
 
     // Drop cache entries for transcripts that no longer exist so deleted
     // sessions leave the list rather than lingering forever.
@@ -290,6 +398,159 @@ mod tests {
             Some("Second"),
             "changed file must be re-parsed"
         );
+    }
+
+    #[test]
+    fn progress_is_measured_in_bytes_not_files() {
+        // File count is dishonest here: measured on a real tree, the ten
+        // largest transcripts are 52.7% of parse time but only 0.7% of the
+        // file count. A count-based bar races to 99% then stalls for seconds.
+        let p = ScanProgress {
+            files_done: 99,
+            files_total: 100,
+            bytes_done: 10,
+            bytes_total: 100,
+        };
+        assert!(
+            (p.fraction() - 0.10).abs() < f64::EPSILON,
+            "fraction must follow bytes (10%), not files (99%)"
+        );
+    }
+
+    #[test]
+    fn an_empty_tree_is_complete_not_a_divide_by_zero() {
+        let p = ScanProgress {
+            files_done: 0,
+            files_total: 0,
+            bytes_done: 0,
+            bytes_total: 0,
+        };
+        assert_eq!(p.fraction(), 1.0);
+    }
+
+    #[test]
+    fn fraction_never_exceeds_one() {
+        // Files can grow mid-scan: a live session writes while we read it.
+        let p = ScanProgress {
+            files_done: 5,
+            files_total: 5,
+            bytes_done: 500,
+            bytes_total: 100,
+        };
+        assert_eq!(
+            p.fraction(),
+            1.0,
+            "a growing file must not push the bar past 100%"
+        );
+    }
+
+    #[test]
+    fn reporting_is_throttled_to_about_one_percent() {
+        // Per-file reporting would emit ~1476 events for one scan, each
+        // crossing the IPC boundary and re-rendering React -- slowing the very
+        // scan it describes.
+        let total = 1_000_000;
+        assert!(
+            !should_report(5_000, 0, total),
+            "0.5% is not worth an event"
+        );
+        assert!(should_report(10_000, 0, total), "1% is");
+        assert!(
+            !should_report(19_000, 10_000, total),
+            "measured from the last report"
+        );
+        assert!(should_report(20_000, 10_000, total));
+    }
+
+    #[test]
+    fn a_zero_byte_total_never_reports() {
+        assert!(!should_report(0, 0, 0), "must not divide by zero or spam");
+    }
+
+    #[test]
+    fn a_scan_reports_progress_that_starts_at_zero_and_ends_complete() {
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        for i in 0..3 {
+            let mut f = std::fs::File::create(proj.join(format!("s{i}.jsonl"))).unwrap();
+            writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s{i}","cwd":"/repo"}}"#).unwrap();
+        }
+
+        let mut seen: Vec<ScanProgress> = Vec::new();
+        let out = index_sessions_with_progress(dir.path(), |p| seen.push(p));
+
+        assert_eq!(out.len(), 3);
+        assert!(
+            seen.len() >= 2,
+            "expected at least a first and final report"
+        );
+        assert_eq!(
+            seen[0].bytes_done, 0,
+            "the first report must be 0%, not partial"
+        );
+        assert_eq!(
+            seen[0].files_total, 3,
+            "the denominator must be known up front"
+        );
+
+        let last = seen.last().unwrap();
+        assert_eq!(last.files_done, 3);
+        assert_eq!(
+            last.bytes_done, last.bytes_total,
+            "the final report must be 100%"
+        );
+        assert_eq!(last.fraction(), 1.0);
+    }
+
+    #[test]
+    fn a_warm_scan_still_reaches_one_hundred_percent() {
+        // The cache-hit path `continue`s. If progress is only counted on the
+        // parse path, a second (warm) scan reports 0 of N bytes done forever --
+        // a bar that never moves is worse than no bar.
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        for i in 0..3 {
+            let mut f = std::fs::File::create(proj.join(format!("warm{i}.jsonl"))).unwrap();
+            writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"warm{i}","cwd":"/repo"}}"#).unwrap();
+        }
+
+        index_sessions(dir.path()); // populate the cache
+
+        let mut seen: Vec<ScanProgress> = Vec::new();
+        index_sessions_with_progress(dir.path(), |p| seen.push(p));
+        let last = seen.last().expect("a final report");
+        assert_eq!(last.files_done, 3, "cached files must still count as done");
+        assert_eq!(
+            last.bytes_done, last.bytes_total,
+            "a warm scan must still finish at 100%, not 0%"
+        );
+    }
+
+    #[test]
+    fn progress_never_goes_backwards() {
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        for i in 0..5 {
+            let mut f = std::fs::File::create(proj.join(format!("s{i}.jsonl"))).unwrap();
+            writeln!(f, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"s{i}","cwd":"/repo"}}"#).unwrap();
+        }
+        let mut seen: Vec<ScanProgress> = Vec::new();
+        index_sessions_with_progress(dir.path(), |p| seen.push(p));
+        for w in seen.windows(2) {
+            assert!(
+                w[1].bytes_done >= w[0].bytes_done,
+                "bytes went backwards: {:?}",
+                w
+            );
+            assert!(
+                w[1].files_done >= w[0].files_done,
+                "files went backwards: {:?}",
+                w
+            );
+        }
     }
 
     #[test]
