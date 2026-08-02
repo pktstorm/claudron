@@ -18,6 +18,13 @@ vi.mock("./api/conversation", () => ({
 }));
 
 const gitLocal = vi.fn();
+vi.mock("./api/scan", () => ({
+  // Subscribing fails outside Tauri. The app must survive that: a progress bar
+  // is decoration, and an unrejected promise here surfaced as an unhandled
+  // rejection that failed CI.
+  onScanProgress: vi.fn(() => Promise.reject(new Error("no tauri event bridge"))),
+}));
+
 vi.mock("./api/git", () => ({
   gitLocal: (...a: unknown[]) => gitLocal(...a),
   gitRemote: vi.fn().mockResolvedValue({ pullRequest: null }),
@@ -58,6 +65,21 @@ describe("App", () => {
 
   it("renders sessions returned by the backend", async () => {
     listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
+  });
+
+  it("still renders when scan progress cannot be subscribed to", async () => {
+    // ./api/scan is mocked to reject: outside Tauri there is no event bridge.
+    // A progress bar is decoration -- failing to subscribe must not take the
+    // app down.
+    //
+    // HONEST NOTE: this assertion alone does not catch a missing `.catch()`.
+    // Without it the render still succeeds and this test still passes; what
+    // changes is that Vitest reports "Unhandled Errors", which fails CI. The
+    // load-bearing part is the rejecting mock above, which makes the rejection
+    // happen at all -- the assertion just pins that the app survives it.
+    listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: null });
     render(<App />);
     await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
   });

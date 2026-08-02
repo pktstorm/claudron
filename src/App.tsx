@@ -7,7 +7,9 @@ import { SessionList } from "./components/SessionList";
 import { ConversationPane } from "./components/ConversationPane";
 import { DetailSlideOver } from "./components/DetailSlideOver";
 import { HookSettings } from "./components/HookSettings";
-import { dismissSplash } from "./splash";
+import { dismissSplash, setSplashProgress } from "./splash";
+import { onScanProgress } from "./api/scan";
+import { scanFraction } from "./types/scan";
 import type { Annotation } from "./types";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -64,6 +66,29 @@ function Shell() {
   useEffect(() => {
     if (settled) dismissSplash();
   }, [settled]);
+
+  // Drive the splash's progress bar from the scan. The listener is registered
+  // once and torn down on unmount; `setSplashProgress` no-ops after the splash
+  // is gone, so a late event from an in-flight scan cannot resurrect it.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    onScanProgress((p) => setSplashProgress(scanFraction(p)))
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      // Subscribing can fail — outside Tauri (tests, a browser dev server)
+      // there is no event bridge at all. A progress bar is decoration; failing
+      // to subscribe must never take the app down or surface as an unhandled
+      // rejection. The splash still dismisses, because that is driven by the
+      // query, not by this.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   function onAnnotationChange(a: Annotation) {
     if (!selected) return;

@@ -54,6 +54,37 @@
         object-fit: contain;
       }
 
+      /* The progress track sits over the lower third of the art, where the
+         splash is darkest and nothing is drawn. */
+      #splash-progress {
+        position: absolute;
+        left: 50%;
+        bottom: 14%;
+        width: 260px;
+        max-width: 40vw;
+        height: 3px;
+        transform: translateX(-50%);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        /* Hidden until there is progress to show, so a warm start (~19ms)
+           never flashes an empty track. */
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+
+      #splash-progress.claudron-visible {
+        opacity: 1;
+      }
+
+      #splash-progress-bar {
+        width: 0%;
+        height: 100%;
+        border-radius: 999px;
+        /* Matches the ember glow in the art rather than introducing a colour. */
+        background: linear-gradient(90deg, #d97706, #f59e0b);
+        transition: width 200ms ease;
+      }
+
       /* Honour a reduced-motion preference: hide immediately rather than fade. */
       @media (prefers-reduced-motion: reduce) {
         #splash {
@@ -66,6 +97,15 @@
   <body>
     <div id="splash">
       <img src="/splash.jpg" alt="Claudron" />
+      <div
+        id="splash-progress"
+        role="progressbar"
+        aria-label="Indexing sessions"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      >
+        <div id="splash-progress-bar"></div>
+      </div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
