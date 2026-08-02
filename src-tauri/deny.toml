@@ -1,0 +1,66 @@
+# Supply-chain gates for 439 crates. Free, no service account.
+#
+# The goal is a gate that fails on things that can actually hurt this app and
+# stays quiet otherwise. A noisy gate gets ignored, and an ignored gate is worse
+# than no gate -- so every exception below says why it is safe HERE, not merely
+# that it was inconvenient.
+
+[graph]
+# Claudron ships macOS only. Evaluating the full cross-platform graph pulls in
+# GTK3, X11, Windows and Android crates that are never compiled, never linked
+# and never shipped -- and they produce the overwhelming majority of findings.
+# Measured: 16 advisories against the full graph, every one unmaintained-only,
+# and zero GTK crates present in the macOS dependency tree.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+
+[advisories]
+# Real vulnerabilities and yanked crates fail the build.
+#
+# `unmaintained` is reported but does not fail: it is a maintenance signal, not
+# an exploit. Tauri's tree carries several (gtk-rs, unic-*, proc-macro-error),
+# none of which a change to this repo can fix, so denying them would leave the
+# gate permanently red and therefore permanently ignored.
+yanked = "deny"
+unmaintained = "none"
+ignore = []
+
+[licenses]
+# Permissive licenses only. Derived from what this tree actually resolves to on
+# macOS via `cargo deny list`, not copied from a template.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+# r-efi is UEFI boot-protocol definitions, reached transitively through
+# getrandom's UEFI support path. Never compiled into a macOS binary, so its
+# copyleft terms never attach to anything shipped.
+exceptions = [{ name = "r-efi", allow = ["LGPL-2.1-or-later"] }]
+
+[bans]
+# Duplicate versions bloat the binary and cause occasional type mismatches
+# across crate boundaries. Warn rather than deny: Tauri's tree legitimately
+# carries several, and denying would block every PR on something no single
+# change can fix.
+multiple-versions = "warn"
+# A wildcard version accepts whatever a future publish puts on crates.io.
+wildcards = "deny"
+
+[sources]
+# Anything not from crates.io deserves a human's attention. A git dependency
+# added by accident -- or by someone with commit access -- is exactly the
+# supply-chain risk this file exists to catch.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

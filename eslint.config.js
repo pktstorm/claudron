@@ -7,7 +7,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 export default tseslint.config(
   // `.remember` is a scratch directory outside any tsconfig; the type-aware
   // parser errors on files it cannot resolve to a project.
-  { ignores: ["dist", "src-tauri/target", ".yarn", ".remember"] },
+  { ignores: ["dist", "src-tauri/target", ".yarn", ".remember", "coverage"] },
   {
     // `recommended` plus only the type-aware rules worth their noise. The full
     // `recommendedTypeChecked` set reports ~28 issues here, nearly all
