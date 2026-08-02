@@ -20,7 +20,7 @@ jobs:
     name: lint
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with:
           rust-components: clippy, rustfmt
@@ -51,7 +51,7 @@ jobs:
     name: test-rust
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
       - name: Rust tests
@@ -73,7 +73,7 @@ jobs:
     name: test-frontend
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
       - name: Frontend tests
@@ -83,7 +83,7 @@ jobs:
     name: build
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
       - name: Build the app bundle
@@ -94,7 +94,7 @@ jobs:
     name: supply-chain
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
       - name: Install cargo-deny
@@ -116,7 +116,7 @@ jobs:
     name: coverage
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with:
           rust-components: llvm-tools-preview
