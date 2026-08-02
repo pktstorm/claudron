@@ -31,10 +31,10 @@ jobs:
         language: [rust, javascript-typescript]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           languages: ${{ matrix.language }}
           # security-and-quality is broader than the default security-only
@@ -46,6 +46,6 @@ jobs:
       # TypeScript extractor never needed a build, so no build step is needed
       # for either language.
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           category: /language:${{ matrix.language }}
