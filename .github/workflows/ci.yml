@@ -9,43 +9,23 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  test:
-    # macOS: Tauri needs the system WebKit, and the app is macOS-only anyway.
-    runs-on: macos-latest
+# Least privilege by default. Jobs needing more say so themselves.
+permissions:
+  contents: read
 
+jobs:
+  # Static gates, split from the suites so a lint failure reports in ~20s
+  # rather than queueing behind a 42s clippy and a 37s race check.
+  lint:
+    name: lint
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Corepack must be enabled BEFORE setup-node, because setup-node's yarn
-      # cache step shells out to yarn and fails against the packageManager pin
-      # while the runner is still on its bundled Yarn 1.
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup
         with:
-          node-version: 24
+          rust-components: clippy, rustfmt
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: .yarn/cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
-          restore-keys: ${{ runner.os }}-yarn-
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      # Cheap checks first: a lint failure should not wait on the test suites.
+      # Cheapest first, so the fastest signal wins.
       - name: Rust formatting
         working-directory: src-tauri
         run: cargo fmt --check
@@ -57,12 +37,9 @@ jobs:
         run: yarn eslint .
 
       # Unused files, exports, and dependencies. Caught a dependency that could
-      # never work (jest-dom without a vitest setupFile) on its first run.
+      # never work (jest-dom with no vitest setupFile) on its first run.
       - name: Knip
         run: yarn knip
-
-      - name: Frontend tests
-        run: yarn vitest run
 
       # --all-targets lints test code too; without it, warnings accumulate in
       # tests unnoticed, which is exactly how two of them did.
@@ -70,13 +47,21 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
 
+  test-rust:
+    name: test-rust
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
 
-      # Tests run concurrently in one process, so a change touching shared state
-      # can fail intermittently. One green run does not prove a race is absent:
-      # a PATH-mutating test once failed about one run in seven.
+      # Tests run concurrently in one process, so a change touching shared
+      # state can fail intermittently. One green run does not prove a race is
+      # absent: a PATH-mutating test once failed about one run in seven, and a
+      # same-second timing test failed on iteration 5 of this very loop.
       - name: Race check
         working-directory: src-tauri
         run: |
@@ -84,37 +69,87 @@ jobs:
             cargo test --lib -- --test-threads=8 || { echo "FAILED ON ITERATION $i"; exit 1; }
           done
 
-  build:
+  test-frontend:
+    name: test-frontend
     runs-on: macos-latest
-
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
-      # Corepack must be enabled BEFORE setup-node, because setup-node's yarn
-      # cache step shells out to yarn and fails against the packageManager pin
-      # while the runner is still on its bundled Yarn 1.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+      - name: Frontend tests
+        run: yarn vitest run
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: .yarn/cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
-          restore-keys: ${{ runner.os }}-yarn-
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install dependencies
-        run: yarn install --immutable
+  build:
+    name: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: Build the app bundle
         run: yarn tauri build --bundles app
+
+  # 439 crates and 470 npm packages, none of which anyone reads by hand.
+  supply-chain:
+    name: supply-chain
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      # Advisories, licenses, duplicate/wildcard versions, and non-crates.io
+      # sources. Scoped to macOS targets in deny.toml -- the full cross-platform
+      # graph reports 16 findings from GTK/X11/Windows crates that never
+      # compile here, and a permanently red gate is an ignored gate.
+      - name: cargo-deny
+        working-directory: src-tauri
+        run: cargo deny check
+
+      # Needs no account and no service.
+      - name: Yarn audit
+        run: yarn npm audit --environment production --severity high
+
+  coverage:
+    name: coverage
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          rust-components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      # tarpaulin is Linux-only (ptrace-based), so llvm-cov is the only viable
+      # Rust coverage tool on macOS runners.
+      - name: Rust coverage
+        working-directory: src-tauri
+        run: cargo llvm-cov --lib --summary-only | tee /tmp/rust-cov.txt
+
+      - name: Frontend coverage
+        run: yarn vitest run --coverage 2>&1 | tee /tmp/ui-cov.txt
+
+      # Written to the job summary rather than pushed to a service: free, no
+      # account, and visible directly on the run. Reporting only -- coverage
+      # does not gate, because a threshold invites tests written to satisfy the
+      # number rather than to catch defects.
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            echo "### Rust"
+            echo '```'
+            tail -3 /tmp/rust-cov.txt 2>/dev/null || echo "(none produced)"
+            echo '```'
+            echo
+            echo "### Frontend"
+            echo '```'
+            grep -A6 'Coverage summary' /tmp/ui-cov.txt 2>/dev/null || echo "(none produced)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

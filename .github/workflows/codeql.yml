@@ -1,0 +1,51 @@
+name: CodeQL
+
+# Semantic analysis of both halves of the codebase. Free on public repos.
+# Rust support went GA in October 2025; TypeScript has been mature for years.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so newly-published queries find old code. A vulnerability class
+    # discovered next month should surface without anyone touching the repo.
+    - cron: "17 6 * * 1"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: macos-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [rust, javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality is broader than the default security-only
+          # suite: it also reports maintainability issues worth seeing on a
+          # codebase this size.
+          queries: security-and-quality
+
+      # Rust scanning is buildless as of the October 2025 GA, and the
+      # TypeScript extractor never needed a build, so no build step is needed
+      # for either language.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

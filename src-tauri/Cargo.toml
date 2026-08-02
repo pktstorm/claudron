@@ -1,8 +1,10 @@
 [package]
 name = "claudron-app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+license = "MIT"
+description = "A pane of glass over every Claude Code session on your machine"
+repository = "https://github.com/pktstorm/claudron"
+authors = ["Caitlin Halla", "Sam Thirlwall"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

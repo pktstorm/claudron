@@ -1,0 +1,116 @@
+name: Autofix
+
+# Runs the --fix mode of every static gate that has one, and pushes the result
+# back to the PR branch.
+#
+# SECURITY: `pull_request`, deliberately NOT `pull_request_target`.
+# pull_request_target would run with the base repo's token and secrets while
+# checking out PR code -- the "pwn request" pattern, where a fork PR can smuggle
+# a malicious lint config or build script and get it executed with write access.
+# With `pull_request`, a fork PR gets a read-only token and cannot push, which
+# is exactly the behaviour we want.
+on:
+  pull_request:
+
+concurrency:
+  group: autofix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  autofix:
+    name: autofix
+    # Fork PRs cannot be pushed to with the default token, so skip rather than
+    # fail confusingly. Contributors from forks still get the normal CI signal
+    # and can run `make lint` locally.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    permissions:
+      # Push the fixes to the PR branch.
+      contents: write
+      # Comment on the PR to say what was changed.
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          # Needed to push back to the branch.
+          persist-credentials: true
+
+      - uses: ./.github/actions/setup
+        with:
+          rust-components: clippy, rustfmt
+
+      # Every gate below is run in fix mode and allowed to fail: the point is to
+      # repair what can be repaired, not to gate. CI itself is the gate.
+      - name: cargo fmt
+        working-directory: src-tauri
+        continue-on-error: true
+        run: cargo fmt
+
+      # clippy --fix needs a clean tree to rewrite, and --allow-dirty lets it
+      # work after cargo fmt has already touched files.
+      - name: clippy --fix
+        working-directory: src-tauri
+        continue-on-error: true
+        run: cargo clippy --fix --all-targets --allow-dirty --allow-staged
+
+      - name: eslint --fix
+        continue-on-error: true
+        run: yarn eslint . --fix
+
+      # knip --fix removes unused exports and files. Deliberately NOT run:
+      # deleting code is not a safe automatic action, and knip legitimately
+      # flags wire-contract types that exist to document a boundary. Left to a
+      # human.
+
+      - name: Commit and push
+        id: push
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing to fix."
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply automatic lint fixes
+
+          Applied by the autofix workflow: cargo fmt, clippy --fix, eslint --fix."
+          git push
+          {
+            echo "### Autofix applied"
+            echo
+            echo "Ran \`cargo fmt\`, \`clippy --fix\` and \`eslint --fix\`, and pushed the result."
+            echo
+            echo "**CI will not re-run automatically.** A push made with the default"
+            echo "\`GITHUB_TOKEN\` does not trigger workflows -- GitHub blocks that to prevent"
+            echo "loops. Re-run the failed checks, or push anything else, to get a fresh result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A comment, because the job summary is easy to miss and the
+      # no-auto-rerun behaviour is genuinely surprising.
+      - name: Comment on the PR
+        if: steps.push.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                '**Autofix pushed a commit.**',
+                '',
+                'Ran `cargo fmt`, `clippy --fix` and `eslint --fix` and committed the result.',
+                '',
+                'CI does **not** re-run automatically after this: a push made with the default',
+                '`GITHUB_TOKEN` cannot trigger workflows, which GitHub enforces to prevent',
+                'infinite loops. Re-run the failed checks, or push again, to get a fresh result.',
+              ].join('\n'),
+            });

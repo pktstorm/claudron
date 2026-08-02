@@ -1,0 +1,41 @@
+name: Set up toolchains
+description: Node with Corepack-pinned Yarn, Rust with caching, and dependencies installed.
+
+inputs:
+  rust-components:
+    description: Extra rustup components, e.g. "clippy, rustfmt".
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Corepack must be enabled BEFORE setup-node's yarn cache runs, because
+    # that cache step shells out to yarn while the runner is still on its
+    # bundled Yarn 1 -- which cannot read a Yarn 4 lockfile.
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Cache Yarn
+      uses: actions/cache@v4
+      with:
+        path: .yarn/cache
+        key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+        restore-keys: ${{ runner.os }}-yarn-
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: ${{ inputs.rust-components }}
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri
+
+    - name: Install dependencies
+      shell: bash
+      run: yarn install --immutable
