@@ -1832,7 +1832,7 @@ __metadata:
     "@vitest/coverage-v8": "npm:^4.1.10"
     eslint: "npm:^9"
     eslint-plugin-react-hooks: "npm:^5"
-    eslint-plugin-react-refresh: "npm:^0.4"
+    eslint-plugin-react-refresh: "npm:^0.5"
     globals: "npm:^17.8.0"
     highlight.js: "npm:^11.11.1"
     jsdom: "npm:^30.0.1"
@@ -2045,12 +2045,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint-plugin-react-refresh@npm:^0.4":
-  version: 0.4.26
-  resolution: "eslint-plugin-react-refresh@npm:0.4.26"
+"eslint-plugin-react-refresh@npm:^0.5":
+  version: 0.5.3
+  resolution: "eslint-plugin-react-refresh@npm:0.5.3"
   peerDependencies:
-    eslint: ">=8.40"
-  checksum: 10c0/11c2b25b7a7025e621b02970c4cf3815b0b77486027df9f8bb731cc52972156804fd163b0f99404b33e36a3c60cd1a1be8199ba64c66b5276da3173bbb5ab6e7
+    eslint: ^9 || ^10
+  checksum: 10c0/b2cda4fe8708f1401a0aaf3ab31fa6c93c283c43fdfa039ec8d27061330848ca3c5148a97b2a249ed228d8072fd971cf83694f555a9f6ec88b3802f22470ab22
   languageName: node
   linkType: hard
 
