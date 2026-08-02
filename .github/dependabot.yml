@@ -12,6 +12,28 @@ updates:
       # because those are the ones that need a human to read a changelog.
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # GTK3 bindings, reached only through tauri -> tray-icon -> libappindicator
+      # -> gtk. Dependabot cannot update these and fails trying:
+      #
+      #   - The glib advisory (GHSA-wrw7-89jp-8q8g) lists NO patched version.
+      #   - gtk 0.18 requires glib ^0.18, so semver forbids the fixed 0.22.
+      #     Verified: `cargo update glib` locks 0 packages, and a full
+      #     `cargo update` leaves it at 0.18.5.
+      #   - None of these appear in the macOS dependency graph at all. They are
+      #     in Cargo.lock because a lockfile records every platform's deps, but
+      #     they are never compiled, linked, or shipped by this app.
+      #
+      # The failing update job is pure noise, and noise trains people to ignore
+      # CI. Revisit when Tauri moves off GTK3.
+      - dependency-name: glib
+      - dependency-name: gtk
+      - dependency-name: gdk*
+      - dependency-name: atk*
+      - dependency-name: pango*
+      - dependency-name: cairo-*
+      - dependency-name: soup*
+      - dependency-name: webkit2gtk*
 
   - package-ecosystem: npm
     directory: /

@@ -53,6 +53,39 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_id_marker_with_nothing_after_it_is_none() {
+        // The marker can appear with no id following -- a truncated write, or
+        // a tool result that mentions the field without announcing one. An
+        // empty id would build a path to `agent-.jsonl`, which never exists.
+        assert!(agent_id_from_result("agentId:").is_none());
+        assert!(agent_id_from_result("agentId:   ").is_none());
+        assert!(agent_id_from_result("agentId: (none)").is_none());
+    }
+
+    #[test]
+    fn the_id_stops_at_the_first_non_alphanumeric_character() {
+        // Real results put commentary after the id in parentheses. Taking the
+        // rest of the line would build a path containing spaces and brackets.
+        assert_eq!(
+            agent_id_from_result("agentId: abc123 (internal ID)").as_deref(),
+            Some("abc123")
+        );
+        assert_eq!(
+            agent_id_from_result("agentId: abc-123").as_deref(),
+            Some("abc"),
+            "a hyphen ends the id"
+        );
+    }
+
+    #[test]
+    fn the_first_agent_id_wins_when_a_result_carries_several() {
+        // A batched tool result can mention more than one. The spawning call
+        // owns the first; taking a later one would link to the wrong agent.
+        let text = "agentId: first1 (a)\nagentId: second2 (b)";
+        assert_eq!(agent_id_from_result(text).as_deref(), Some("first1"));
+    }
+
+    #[test]
     fn builds_the_subagent_path_beside_the_transcript() {
         // Real layout: <project-dir>/<session-uuid>/subagents/agent-<id>.jsonl
         let t = Path::new("/p/-Users-s-code-repo/5f34a680-16f5.jsonl");
