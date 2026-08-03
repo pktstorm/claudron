@@ -20,8 +20,15 @@ export function GitTab({ cwd, isLive }: { cwd: string; isLive: boolean }) {
   const [nonce, setNonce] = useState(0);
 
   // Local first -- it is ~115ms against gh's ~566ms, so it must never wait.
+  //
+  // The clear-then-fetch pair is a genuine effect: it reacts to a cwd change or
+  // a refresh by starting network work, which is exactly what effects are for.
+  // Clearing synchronously is deliberate -- the alternative is rendering the
+  // PREVIOUS directory's branch and dirty count under the new cwd until the
+  // fetch resolves, which is worse than a loading state.
   useEffect(() => {
     let live = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocal(null);
     setLocalError(null);
     gitLocal(cwd)
@@ -39,16 +46,22 @@ export function GitTab({ cwd, isLive }: { cwd: string; isLive: boolean }) {
     };
   }, [cwd, nonce]);
 
-  // A live process starting in this directory invalidates an open
-  // confirmation the same way stale data would -- close it rather than leave
-  // "Confirm" clickable against a guard that would now refuse.
-  useEffect(() => {
-    if (isLive) setConfirming(false);
-  }, [isLive]);
+  // A live process starting in this directory invalidates an open confirmation
+  // the same way stale data would -- leaving "Confirm" clickable against a
+  // guard that would now refuse.
+  //
+  // Derived during render rather than in an effect: whether the confirmation
+  // shows is a function of state AND isLive, so there is nothing to
+  // synchronise. An effect here would paint one frame with the confirmation
+  // still open over a session that just went live.
+  const showConfirm = confirming && !isLive;
 
   useEffect(() => {
     if (!local?.branch) return;
     let live = true;
+    // Same reasoning as the local fetch above: clearing synchronously avoids
+    // showing the previous branch's pull request under a new branch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRemote(null);
     setRemoteError(null);
     gitRemote(cwd, local.branch)
@@ -120,7 +133,7 @@ export function GitTab({ cwd, isLive }: { cwd: string; isLive: boolean }) {
       {wt.isWorktree && !removed && (
         <section>
           <p className="text-xs text-neutral-400">Worktree of {wt.repoRoot}</p>
-          {!confirming && (
+          {!showConfirm && (
             <p className="break-all text-[11px] text-neutral-600">{wt.path}</p>
           )}
 
@@ -128,7 +141,7 @@ export function GitTab({ cwd, isLive }: { cwd: string; isLive: boolean }) {
             <p className="mt-1 text-[11px] text-amber-400">{blockedReason}</p>
           )}
 
-          {!confirming ? (
+          {!showConfirm ? (
             <button
               type="button"
               disabled={blockedReason !== null}

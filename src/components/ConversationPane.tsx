@@ -52,16 +52,38 @@ export function ConversationPane({ sessionId }: { sessionId: string }) {
   });
 
   // Reset all local state when the selected session changes.
-  useEffect(() => {
+  //
+  // Adjusted DURING render rather than in an effect. An effect would paint the
+  // previous session's turns under the new session's id before clearing them,
+  // and `openAgent` in particular is dangerous stale: agent ids repeat across
+  // sessions, so a leftover value can satisfy the render guard and keep an
+  // unrelated subagent panel open. A test covers exactly that case.
+  //
+  // A `key` would also work, but the caller keeps one instance across the
+  // change -- and so does the test -- so the reset has to live in here.
+  const [lastSessionId, setLastSessionId] = useState(sessionId);
+  if (sessionId !== lastSessionId) {
+    setLastSessionId(sessionId);
     setTurns([]);
     setOffset(null);
     setOpenAgent(null);
     setStuck(true);
     setPollError(null);
-  }, [sessionId]);
+  }
 
+  // Seed local state from the query once it resolves.
+  //
+  // This one genuinely belongs in an effect, and the rule is suppressed rather
+  // than worked around. `turns` cannot be derived from `data`: the tail poll
+  // appends to it via applyDelta, and a late tool result patches a turn already
+  // rendered, so local state is the owner and `data` is only its seed. React
+  // reacting to a resolved query is the documented use for an effect.
+  //
+  // The extra render the rule warns about is real but bounded -- one per
+  // session load, not per poll.
   useEffect(() => {
     if (!data) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTurns(data.turns);
     setOffset(data.offset);
   }, [data]);

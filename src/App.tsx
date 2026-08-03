@@ -43,10 +43,17 @@ function Shell() {
   const [showSettings, setShowSettings] = useState(false);
   const shown = draft && selected ? { ...selected, annotation: draft } : selected;
 
-  useEffect(() => {
+  // Selecting a different session drops the unsaved draft and closes the
+  // slide-over. Adjusted DURING render rather than in an effect: an effect
+  // would render the previous session's draft over the new session's row, then
+  // set state and render again. React re-runs this component immediately
+  // without committing the first pass, so that stale frame is never painted.
+  const [lastSelectedId, setLastSelectedId] = useState(selectedId);
+  if (selectedId !== lastSelectedId) {
+    setLastSelectedId(selectedId);
     setDraft(null);
     setShowDetails(false);
-  }, [selectedId]);
+  }
 
   // A pending debounced save must not fire after the component (or the
   // selected session) is gone.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Annotation, Session } from "../types";
 import { focusSession, resumeSession } from "../api/tauri";
 import { StatusPicker } from "./StatusPicker";
@@ -10,11 +10,12 @@ export function SessionDetail({
   session: Session | null;
   onAnnotationChange: (a: Annotation) => void;
 }) {
+  // Reset on session change comes from the `key` this is rendered with, not
+  // from an effect. An effect that calls setState synchronously makes React
+  // render, run the effect, set state, and render again -- and React's own
+  // guidance for "reset all state when a prop changes" is a key, which does it
+  // in one pass.
   const [actionError, setActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setActionError(null);
-  }, [session?.sessionId]);
 
   if (!session) {
     return (
