@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Annotation, Session } from "../types";
 import { SessionDetail } from "./SessionDetail";
 import { GitTab } from "./GitTab";
@@ -17,11 +17,19 @@ export function DetailSlideOver({
   const [tab, setTab] = useState<"overview" | "git">("overview");
 
   // The slide-over stays mounted across session changes, so switching the
-  // selected session must snap back to Overview rather than keep showing
-  // Git content computed for the previous session's cwd.
-  useEffect(() => {
+  // selected session must snap back to Overview rather than keep showing Git
+  // content computed for the previous session's cwd.
+  //
+  // Adjusted DURING render rather than in an effect. A `key` cannot do it here
+  // -- the caller keeps one instance across the change, which is the very
+  // thing this handles -- and an effect would render the stale tab, set state,
+  // and render again. React re-runs this component immediately without
+  // committing the first pass, so the wrong tab is never painted.
+  const [lastSessionId, setLastSessionId] = useState(session?.sessionId);
+  if (session?.sessionId !== lastSessionId) {
+    setLastSessionId(session?.sessionId);
     setTab("overview");
-  }, [session?.sessionId]);
+  }
 
   const tabClass = (t: string) =>
     `px-3 py-1.5 text-xs ${
@@ -50,7 +58,11 @@ export function DetailSlideOver({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {tab === "overview" ? (
-            <SessionDetail session={session} onAnnotationChange={onAnnotationChange} />
+            <SessionDetail
+              key={session?.sessionId ?? "none"}
+              session={session}
+              onAnnotationChange={onAnnotationChange}
+            />
           ) : session ? (
             <GitTab
               cwd={session.cwd}
