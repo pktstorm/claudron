@@ -13,6 +13,12 @@ concurrency:
 permissions:
   contents: read
 
+# Third-party actions are pinned to full commit SHAs, not floating tags. A tag
+# is mutable: whoever controls the action repo can repoint v4 at new code, and
+# that code runs with whatever permissions the job grants. The trailing comment
+# records which release each SHA is, since a bare SHA is unreadable.
+# Dependabot updates these automatically and rewrites the comment with it.
+
 jobs:
   # Static gates, split from the suites so a lint failure reports in ~20s
   # rather than queueing behind a 42s clippy and a 37s race check.
@@ -20,7 +26,7 @@ jobs:
     name: lint
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
           rust-components: clippy, rustfmt
@@ -51,7 +57,7 @@ jobs:
     name: test-rust
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
 
       - name: Rust tests
@@ -73,7 +79,7 @@ jobs:
     name: test-frontend
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
 
       - name: Frontend tests
@@ -83,7 +89,7 @@ jobs:
     name: build
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
 
       - name: Build the app bundle
@@ -94,7 +100,7 @@ jobs:
     name: supply-chain
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
 
       - name: Install cargo-deny
@@ -116,7 +122,7 @@ jobs:
     name: coverage
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
           rust-components: llvm-tools-preview
