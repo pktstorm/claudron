@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-04
 **Status:** Approved, pending implementation plan
-**Scope:** Small. One component, one new test, two documentation edits. No behaviour change in production.
+**Scope:** Small. One component, one new test, and the documentation and comments that describe the
+old constraint. No behaviour change in production.
 **Issue:** [#7](https://github.com/pktstorm/claudron/issues/7)
 
 ## Summary
@@ -119,16 +120,43 @@ Waiting on specific rather than shared text remains good practice; it simply sto
 requirement forced by shared cache state. The rewrite should say that rather than deleting the
 advice outright.
 
+## In-code comments that describe the singleton
+
+Two comments in `src/App.test.tsx` explain the workaround as a live constraint, and both make a
+claim that this change falsifies:
+
+- **`App.test.tsx:174-176`** — *"Wait for this test's own fixture (the "Managed" badge), not just
+  the title text, since a prior test's cached query result can otherwise still be on screen when
+  this render first paints."*
+- **`App.test.tsx:200-202`** — the same reasoning, for the fixture title.
+
+These are corrected in the same commit. Leaving them is the identical defect to leaving the
+`CLAUDE.md` paragraph, and worse for being harder to find.
+
+**The assertions themselves do not change.** Only the justification does. Waiting on a fixture the
+test itself established is good practice regardless of cache lifetime, and relaxing these back to
+text shared across fixtures would walk into this repo's documented failure #2 — *assert on something
+only the component under test can render*. The singleton made fixture-specific waiting mandatory;
+removing it makes that waiting merely correct. The rewritten comments must say so explicitly, or the
+next reader deletes the specificity as redundant and reintroduces a fragile test for a different
+reason.
+
 ## Out of scope
 
-Existing tests that were written around the singleton are left as they are. They are correct, they
-pass, and rewriting them would widen the diff into files this issue did not ask about. The
-pre-existing `react-refresh/only-export-components` warning in `ConversationPane.tsx` is likewise
-untouched.
+`ConversationPane.test.tsx:27` already constructs a fresh `QueryClient` inside its `wrap()` helper.
+That was never a workaround — it is the idiomatic pattern, and it remains correct after this change.
+Untouched.
+
+The pre-existing `react-refresh/only-export-components` warning in `ConversationPane.tsx` is
+likewise untouched.
 
 ## Success criteria
 
 - `make test` passes — 146 existing tests plus the new one.
 - `make lint` passes, with no new warnings beyond the pre-existing `ConversationPane.tsx` one.
 - The new test has been observed failing against the unfixed code, for the intended reason.
-- No `CLAUDE.md` or `CONTRIBUTING.md` guidance still describes the singleton as current.
+- No guidance or comment anywhere in the repo still describes the singleton as current. Verified by
+  searching for `singleton`, `cached data`, `prior test`, and `#7` across `src/` and the Markdown
+  docs, not by memory of which files were edited.
+- The two `App.test.tsx` assertions still wait on fixture-specific text, with their comments
+  explaining that this is deliberate practice rather than a workaround.
