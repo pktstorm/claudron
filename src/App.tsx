@@ -12,8 +12,6 @@ import { onScanProgress } from "./api/scan";
 import { scanFraction } from "./types/scan";
 import type { Annotation } from "./types";
 
-const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
 function Shell() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const filters = useFilters();
@@ -188,6 +186,14 @@ function Shell() {
 }
 
 export default function App() {
+  // Per mount, not module scope: a module-level client shares one cache across
+  // every render in a test run, so a render could show the previous test's
+  // sessions before its own fixture resolved. `useState` with a lazy
+  // initializer -- not `useMemo`, which React is permitted to discard and
+  // recompute, silently resetting the cache mid-session.
+  const [client] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  );
   return (
     <QueryClientProvider client={client}>
       <Shell />

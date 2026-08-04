@@ -130,9 +130,11 @@ done
 matchers are not registered — `toBeInTheDocument()` will fail confusingly. Use `toBeDefined()`,
 `toBeNull()`, `toHaveLength()`, `toBe()`, `toEqual()`.
 
-`App.tsx`'s `QueryClient` is a module-level singleton that is not cleared between tests, so a
-render can briefly show a previous test's cached data. Wait on fixture-specific text rather than
-text shared across fixtures. Tracked in #7.
+`App.tsx` builds its `QueryClient` inside the component, so every `render(<App />)` starts with an
+empty cache and no test can see another's data. Build it with `useState`, never `useMemo` — React
+is permitted to discard a memoized value and recompute it, which would reset the cache mid-session.
+Still prefer waiting on fixture-specific text over text shared across fixtures: an assertion only
+the fixture under test can satisfy is what makes a test discriminate.
 
 ## Rules that exist because of specific bugs
 
