@@ -69,6 +69,27 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
   });
 
+  it("does not serve one mount's cached sessions to the next", async () => {
+    listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
+    const first = render(<App />);
+    await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
+    first.unmount();
+
+    // A promise that never settles holds the second mount in its loading
+    // state. That is the whole mechanism of this test: while the second fetch
+    // is in flight, the ONLY thing that could put "Fix the parser" on screen
+    // is a query cache shared with the first mount. Let the second fetch
+    // resolve instead and the assertion passes either way, because fresh data
+    // overwrites stale data and the leak becomes invisible.
+    listSessions.mockReturnValue(new Promise(() => {}));
+    render(<App />);
+
+    // Checked synchronously, not inside waitFor: react-query serves a cache
+    // hit on the first paint, so a leak is present immediately or not at all.
+    // waitFor would retry until the absence became true and hide the bug.
+    expect(screen.queryByText("Fix the parser")).toBeNull();
+  });
+
   it("still renders when scan progress cannot be subscribed to", async () => {
     // ./api/scan is mocked to reject: outside Tauri there is no event bridge.
     // A progress bar is decoration -- failing to subscribe must not take the
@@ -171,9 +192,10 @@ describe("App", () => {
       mergedIntoDefault: null,
     });
     render(<App />);
-    // Wait for this test's own fixture (the "Managed" badge), not just the
-    // title text, since a prior test's cached query result can otherwise
-    // still be on screen when this render first paints.
+    // Wait on this test's own fixture (the "Managed" badge) rather than the
+    // shared title text. Each mount gets its own QueryClient, so this is no
+    // longer guarding against another test's cache -- it is the assertion
+    // that proves *this* fixture rendered. Keep it specific.
     await waitFor(() => expect(screen.getByText("Managed")).toBeDefined());
     fireEvent.click(screen.getByText("Fix the parser"));
     fireEvent.click(screen.getByRole("button", { name: /details/i }));
@@ -197,9 +219,10 @@ describe("App", () => {
       mergedIntoDefault: null,
     });
     render(<App />);
-    // Wait for this test's own fixture title, not just any stale cached
-    // session, since a prior test's cached query result can otherwise still
-    // be on screen when this render first paints.
+    // Wait on this test's own fixture title rather than shared text. Each
+    // mount gets its own QueryClient, so this is not guarding against a prior
+    // test's cache -- it is the assertion that proves this fixture rendered.
+    // Keep it specific.
     await waitFor(() => expect(screen.getByText("Idle session for removal test")).toBeDefined());
     fireEvent.click(screen.getByText("Idle session for removal test"));
     fireEvent.click(screen.getByRole("button", { name: /details/i }));
