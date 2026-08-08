@@ -230,3 +230,18 @@ were deliberately left alone for exactly this reason.
 worktrees; `gh` is roughly 566 ms; a warm session scan is about 19 ms. State the range and how it
 was measured, and do not overclaim what a number covers — that timing measures inspecting *one*
 repo that has 73 worktrees, not enumerating all 73.
+
+**Time the scan against a frozen copy of the transcript tree, never the live one.** The transcript
+of the session doing the measuring is being appended while the test runs, so the warm scan takes a
+real cache miss on it and reports an outlier — measured at ~26 ms against a 0.43 ms baseline, in
+roughly **1 run in 7**. That looks exactly like the concurrency bug this file warns about elsewhere
+and is not one. `cp -R ~/.claude/projects <tmp>` and point `CLAUDRON_PROJECTS_DIR` at the copy;
+the same measurement went from a contaminated "+12% cold" to a stable +4.5%.
+
+**The session walk and the dashboard walk are deliberately different walks.** Subagent transcripts
+live at `<project>/<stem>/subagents/agent-<id>.jsonl` — depth 4, where the session walk stops at
+depth 2. Statistics need them; the session list never reads them, and walking them took the file
+count from 19 to 31 on a poll that runs continuously. So `walk` takes `include_subagents`. The trap
+is the eviction rule that follows: a session-only walk never *visits* subagent transcripts, so
+`cache.retain` must not read their absence from `seen` as deletion — doing so makes the 3-second
+poll throw away the dashboard's cached statistics and forces a full re-parse every time it opens.

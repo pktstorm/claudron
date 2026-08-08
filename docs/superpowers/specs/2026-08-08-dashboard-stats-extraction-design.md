@@ -1,7 +1,7 @@
 # Claudron — Per-Transcript Stats Extraction
 
 **Date:** 2026-08-08
-**Status:** Draft, pending review
+**Status:** Implemented. Cost section carries measured figures, not predictions.
 **Scope:** Medium. One existing Rust module restructured, one new Rust module, one new dependency. No UI.
 **Issues:** [#15](https://github.com/pktstorm/claudron/issues/15) (stats dashboard) — the extraction half
 **Related:** [#13](https://github.com/pktstorm/claudron/issues/13) (shadcn), [#42](https://github.com/pktstorm/claudron/issues/42) (SQLite), [#53](https://github.com/pktstorm/claudron/issues/53) (cold scan)
@@ -171,6 +171,12 @@ entire +4.1%.
 `<stem>/subagents/agent-<id>.jsonl`, so a stats record found beneath a `subagents/` directory belongs
 to the session named by the directory two levels up. No extra parsing establishes the link.
 
+**The walk had to grow to reach them at all.** Not anticipated at design time: `index.rs` walked
+with `max_depth(2)`, and a subagent transcript sits at depth 4
+(`<project>/<stem>/subagents/agent-<id>.jsonl`). Every subagent file was therefore invisible to the
+scan regardless of what `parse_transcript` did with it. The dashboard walk uses depth 4; the session
+walk stays at depth 2 and skips subagent transcripts, for the warm-path reason in *Cost*.
+
 **Cache** gains one slot, keyed on the same `(mtime, size)` freshness that already invalidates per
 file:
 
@@ -256,14 +262,34 @@ The rollup runs over cached structs and touches no files. It must **not** be dri
 
 ## Cost
 
-- Marginal scan cost is **+4.1% of bytes** on this machine, from removing the sidechain early return.
-  Everything else is field access on `Value`s the scan already built.
-- **Must be measured in Rust before and after**, using the existing `#[ignore]`d timing harness in
-  `index.rs`. The 4.1% figure is a byte ratio measured in Python on 31 files; it is a prediction of
-  the Rust delta, not a measurement of it.
-- **The warm poll must not regress.** The warm scan is ~19 ms and runs continuously; cold-start time
-  must not be traded for it. Per-file stats are computed once per `(mtime, size)` change, exactly as
-  session parsing already is.
+Predicted at design time: **+4.1% of bytes**, from removing the sidechain early return.
+
+**Measured after implementation**, ten runs per side against a *frozen copy* of the transcript tree
+(31 files), using the `#[ignore]`d timing harness in `index.rs`:
+
+| | cold (median) | warm (median) |
+|---|---|---|
+| before | 404 ms | 426 µs |
+| after | 422 ms | 438 µs |
+| delta | **+4.5%** | +3%, within run-to-run noise |
+
+The cold delta landed within half a point of the prediction. Two things had to be got right first,
+and both were found by measuring rather than by reading:
+
+- **Measure against a frozen tree.** Run against the live `~/.claude/projects` and the numbers are
+  contaminated: the running session's own transcript is appended mid-run, the warm scan takes a
+  genuine cache miss on it, and the result is a ~26 ms outlier in roughly 1 run in 7. That looks
+  exactly like a race and is not one. The first measurement taken this way reported +12% cold.
+- **`include_subagents` is what protects the warm path.** Raising the walk to depth 4 took the file
+  count from 19 to 31, and the session list -- which reads no statistics at all -- paid for every
+  one of them on a poll that runs continuously. The session walk therefore stays at depth 2 and
+  skips subagent transcripts.
+
+Because a session-only walk never visits subagent transcripts, `cache.retain` must not read their
+absence as deletion. Evicting them there would make the 3-second session poll discard the
+dashboard's cached statistics and force a full re-parse on every dashboard open.
+
+The 20-iteration concurrency loop required for changes touching shared state passed with 0 failures.
 - Memory: at 31 files the daily maps are trivial. At #53's 1461 files, with a median span of one day,
   the order is a few thousand small entries. Worth confirming, not worth pre-optimising.
 
