@@ -63,6 +63,51 @@ describe("App", () => {
     });
   });
 
+  it("dismisses the launch splash even when opened on the dashboard", async () => {
+    // The splash is dismissed by the sessions query settling. If that logic
+    // lives in the session view rather than in App, opening on any other view
+    // leaves a `position: fixed; inset: 0` overlay in place -- which, per
+    // splash.ts, swallows every click even at zero opacity. The app looks
+    // frozen at launch with no error anywhere.
+    //
+    // splash.ts operates on a real element by id, so this needs no mock.
+    const splash = document.createElement("div");
+    splash.id = "splash";
+    document.body.appendChild(splash);
+
+    listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+
+    await waitFor(() => expect(document.getElementById("splash")).toBeNull());
+  });
+
+  it("replaces the session list when the dashboard is showing", async () => {
+    listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
+
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+
+    // Asserted on the session's own title: only the session list renders it.
+    // An App-level test in this repo once asserted text the always-mounted
+    // sidebar happened to render, and passed while the component under test
+    // was replaced by a stub.
+    expect(screen.queryByText("Fix the parser")).toBeNull();
+    expect(screen.queryByText(/1 sessions/i)).toBeNull();
+  });
+
+  it("returns to the session list from the dashboard", async () => {
+    listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
+
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sessions" }));
+
+    await waitFor(() => expect(screen.getByText("Fix the parser")).toBeDefined());
+  });
+
   it("renders sessions returned by the backend", async () => {
     listSessions.mockResolvedValue({ sessions: [mk()], versionBaseline: "2.1.220" });
     render(<App />);
