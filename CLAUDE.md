@@ -130,6 +130,11 @@ done
 matchers are not registered — `toBeInTheDocument()` will fail confusingly. Use `toBeDefined()`,
 `toBeNull()`, `toHaveLength()`, `toBe()`, `toEqual()`.
 
+**`?raw` returns an empty string for `.css`.** The Tailwind Vite plugin intercepts CSS requests, so
+`import css from "./index.css?raw"` yields `""`. A test comparing two such reads passes while
+proving nothing — the same shape as the guard that compared a value against itself. `?raw` is fine
+for `.html` and `.json`; read CSS with `node:fs` (`@types/node` is installed for exactly this).
+
 `App.tsx` builds its `QueryClient` inside the component, so every `render(<App />)` starts with an
 empty cache and no test can see another's data. Build it with `useState`, never `useMemo` — React
 is permitted to discard a memoized value and recompute it, which would reset the cache mid-session.

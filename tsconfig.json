@@ -13,6 +13,10 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    /* `vite/client` types the `?raw` imports used to read project files in
+       tests; `node` types `node:fs`, needed because the Tailwind Vite plugin
+       intercepts `.css` and makes `?raw` return an empty string for it. */
+    "types": ["vite/client", "node"],
 
     /* Linting */
     "strict": true,
