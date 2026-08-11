@@ -1,6 +1,7 @@
 import type { Liveness, ManualStatus } from "../types";
 import { useFilters } from "../store/filters";
 import { LIVENESS_LABEL, STATUS_LABEL } from "../labels";
+import { Toggle } from "./ui/toggle";
 
 const LIVENESS: Liveness[] = ["legacy", "interrupted", "idle"];
 const STATUSES: ManualStatus[] = ["blocked", "needsReview", "waitingOnMe", "background"];
@@ -18,28 +19,26 @@ export function FilterBar() {
       />
       <div className="flex flex-wrap gap-1">
         {LIVENESS.map((l) => (
-          <button
+          <Toggle
             key={l}
-            type="button"
-            onClick={() => setLiveness(liveness === l ? null : l)}
-            className={`rounded px-2 py-0.5 text-[11px] ${
-              liveness === l ? "bg-sky-500/20 text-sky-300" : "bg-neutral-800 text-neutral-400"
-            }`}
+            size="sm"
+            pressed={liveness === l}
+            onPressedChange={(on) => setLiveness(on ? l : null)}
+            className={liveness === l ? "bg-sky-500/20 text-sky-300" : "text-neutral-400"}
           >
             {LIVENESS_LABEL[l]}
-          </button>
+          </Toggle>
         ))}
         {STATUSES.map((s) => (
-          <button
+          <Toggle
             key={s}
-            type="button"
-            onClick={() => setStatus(status === s ? null : s)}
-            className={`rounded px-2 py-0.5 text-[11px] ${
-              status === s ? "bg-purple-500/20 text-purple-300" : "bg-neutral-800 text-neutral-400"
-            }`}
+            size="sm"
+            pressed={status === s}
+            onPressedChange={(on) => setStatus(on ? s : null)}
+            className={status === s ? "bg-purple-500/20 text-purple-300" : "text-neutral-400"}
           >
             {STATUS_LABEL[s]}
-          </button>
+          </Toggle>
         ))}
       </div>
     </div>

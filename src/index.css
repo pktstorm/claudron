@@ -1,1 +1,83 @@
 @import "tailwindcss";
+
+/*
+ * shadcn/ui design tokens, DARK ONLY.
+ *
+ * There is no `.dark` class and no light set. The app has never had a light
+ * mode -- there is not one `dark:` variant in `src/` -- and dark is pinned in
+ * two places outside CSS that a light theme would also have to change:
+ * `tauri.conf.json` (`backgroundColor`) and the inline `<style>` in
+ * `index.html`, which is inline so the splash paints on the first frame.
+ *
+ * Every value below is the colour the app ALREADY uses, taken verbatim from
+ * Tailwind v4's palette, so adding this file changes nothing on screen.
+ * Adopting shadcn's own dark theme would have restyled the whole app as a side
+ * effect of installing a component library.
+ *
+ * `--background` in particular must stay `neutral-900`: it is the same colour
+ * as the window chrome and the splash, and any drift opens a visible flash at
+ * the splash-to-app seam. A test asserts this.
+ */
+:root {
+  --radius: 0.25rem;
+
+  --background: oklch(20.5% 0 none); /* neutral-900 */
+  --foreground: oklch(97% 0 none); /* neutral-100 */
+
+  --card: oklch(20.5% 0 none); /* neutral-900 */
+  --card-foreground: oklch(97% 0 none); /* neutral-100 */
+  --popover: oklch(20.5% 0 none); /* neutral-900 */
+  --popover-foreground: oklch(97% 0 none); /* neutral-100 */
+
+  --primary: oklch(68.5% 0.169 237.323); /* sky-500 */
+  --primary-foreground: oklch(20.5% 0 none); /* neutral-900 */
+
+  --secondary: oklch(26.9% 0 none); /* neutral-800 -- today's unselected chip */
+  --secondary-foreground: oklch(92.2% 0 none); /* neutral-200 */
+
+  --muted: oklch(26.9% 0 none); /* neutral-800 */
+  --muted-foreground: oklch(55.6% 0 none); /* neutral-500 -- most-used text colour */
+
+  --accent: oklch(26.9% 0 none); /* neutral-800 */
+  --accent-foreground: oklch(92.2% 0 none); /* neutral-200 */
+
+  --destructive: oklch(63.7% 0.237 25.331); /* red-500 */
+  --destructive-foreground: oklch(97% 0 none); /* neutral-100 */
+
+  --border: oklch(26.9% 0 none); /* neutral-800 */
+  --input: oklch(26.9% 0 none); /* neutral-800 */
+  --ring: oklch(68.5% 0.169 237.323); /* sky-500 -- today's focus ring */
+}
+
+/*
+ * Expose the tokens as Tailwind utilities (`bg-background`, `text-muted-foreground`).
+ *
+ * Status hues are deliberately absent: `sky` for liveness, `purple` for manual
+ * status and `amber`/`emerald`/`red` for CI state are application meanings, not
+ * theme roles -- shadcn has no token for "waiting on me". They stay as explicit
+ * palette classes.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
