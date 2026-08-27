@@ -8,6 +8,7 @@ pub mod index;
 pub mod model;
 pub mod process;
 pub mod project;
+pub mod stats;
 pub mod transcript;
 pub mod version;
 
@@ -94,6 +95,7 @@ pub fn run() {
             git::git_local,
             git::git_remote,
             git::remove_worktree,
+            stats::dashboard_stats,
             hooks::hook_status,
             hooks::install_hooks,
             hooks::uninstall_hooks,

@@ -1,6 +1,8 @@
 use crate::model::{Annotation, Liveness, Session};
 use crate::project::project_label;
-use crate::transcript::parse_transcript;
+use crate::stats::TranscriptEntry;
+use crate::transcript::{parse_transcript, TranscriptStats};
+use chrono::Local;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
@@ -29,7 +31,7 @@ type Freshness = (u128, u64);
 /// `HashMap::new()` is not a const fn, so a plain `Mutex::new(HashMap::new())`
 /// cannot be a `static` initializer here; `LazyLock` (stable std, no new crate)
 /// defers construction to first access instead.
-type CacheEntry = (Freshness, Option<Session>);
+type CacheEntry = (Freshness, Option<Session>, TranscriptStats);
 static CACHE: LazyLock<Mutex<HashMap<PathBuf, CacheEntry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -117,16 +119,76 @@ pub fn index_sessions(root: &Path) -> Vec<Session> {
     index_sessions_with_progress(root, |_| {})
 }
 
-/// `index_sessions`, reporting progress as it goes.
+/// Every walked transcript, sessions and subagents alike, with its statistics.
+///
+/// Unsorted: ordering is a session-list concern, and this is the dashboard's
+/// input.
+pub fn index_entries(root: &Path) -> Vec<TranscriptEntry> {
+    index_entries_with_progress(root, |_| {})
+}
+
+pub fn index_entries_with_progress(
+    root: &Path,
+    on_progress: impl FnMut(ScanProgress),
+) -> Vec<TranscriptEntry> {
+    let mut out = Vec::new();
+    walk(
+        root,
+        on_progress,
+        |path, session, stats| {
+            out.push(TranscriptEntry {
+                path: path.to_path_buf(),
+                session: session.clone(),
+                stats: stats.clone(),
+            })
+        },
+        true,
+    );
+    out
+}
+
+/// `index_sessions_with_progress`, before the sessions are separated out.
+pub fn index_sessions_with_progress(
+    root: &Path,
+    on_progress: impl FnMut(ScanProgress),
+) -> Vec<Session> {
+    let mut out: Vec<Session> = Vec::new();
+    walk(
+        root,
+        on_progress,
+        |_, session, _| {
+            if let Some(s) = session {
+                out.push(s.clone());
+            }
+        },
+        false,
+    );
+    sort_sessions(&mut out);
+    out
+}
+
+/// Walk every transcript under `root`, reporting progress as it goes.
 ///
 /// `on_progress` is called as files are processed, so a caller can drive a
 /// progress bar. It is NOT called per file: at 1476 files that would be 1476
 /// events for an 11.8 s scan, most of them redundant. See `should_report`.
-pub fn index_sessions_with_progress(
+///
+/// `sink` receives each transcript BY REFERENCE so a caller allocates only what
+/// it will use. The session list reads no statistics at all, and materialising a
+/// `TranscriptEntry` -- a `PathBuf` plus two cloned `BTreeMap`s -- per cache hit
+/// showed up immediately on the warm scan.
+///
+/// `include_subagents` is what keeps that warm scan honest. Subagent transcripts
+/// are needed for statistics and are useless to the session list, and walking
+/// them raised the file count 19 -> 31 on the tree this was measured against.
+/// Skipping them for the session path restores the baseline warm time; see the
+/// note on `cache.retain` below for why that cannot simply evict them.
+fn walk(
     root: &Path,
     mut on_progress: impl FnMut(ScanProgress),
-) -> Vec<Session> {
-    let mut out = Vec::new();
+    mut sink: impl FnMut(&Path, &Option<Session>, &TranscriptStats),
+    include_subagents: bool,
+) {
     let mut seen: HashSet<PathBuf> = HashSet::new();
 
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
@@ -134,11 +196,16 @@ pub fn index_sessions_with_progress(
     // Enumerate first so the denominator is known before any parsing. Measured
     // at 68 ms for 1476 files against 11.8 s of parsing -- cheap enough that
     // the honest progress bar costs essentially nothing.
+    // Depth 4, not 2: a subagent transcript is
+    // <project>/<stem>/subagents/agent-<id>.jsonl. Stopping at 2 walked only
+    // top-level session transcripts and never saw the subagents, which hold a
+    // measured 16.4% of all tool calls.
     let files: Vec<_> = WalkDir::new(root)
-        .max_depth(2)
+        .max_depth(if include_subagents { 4 } else { 2 })
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+        .filter(|e| include_subagents || !crate::stats::is_subagent_transcript(e.path()))
         .collect();
 
     let files_total = files.len();
@@ -174,11 +241,9 @@ pub fn index_sessions_with_progress(
 
         seen.insert(path.to_path_buf());
 
-        if let Some((cached_freshness, cached_session)) = cache.get(path) {
+        if let Some((cached_freshness, cached_session, cached_stats)) = cache.get(path) {
             if *cached_freshness == freshness {
-                if let Some(session) = cached_session {
-                    out.push(session.clone());
-                }
+                sink(path, cached_session, cached_stats);
                 // A cache hit is still work done. Counting only the parse path
                 // would leave a warm scan reporting 0% forever -- and a warm
                 // scan is the common case, at ~19ms against 11.8s cold.
@@ -200,7 +265,9 @@ pub fn index_sessions_with_progress(
         // Cache the outcome either way: most transcripts on a real tree are
         // rejected (sdk sessions, sidechains, no entrypoint), and if we only
         // cached successes, every poll would re-parse all of them forever.
-        let session = parse_transcript(path).map(|summary| {
+        let parsed = parse_transcript(path, &Local);
+        let stats = parsed.as_ref().map(|p| p.stats.clone()).unwrap_or_default();
+        let session = parsed.and_then(|p| p.summary).map(|summary| {
             let cwd = summary.cwd.clone().unwrap_or_default();
             Session {
                 session_id: summary.session_id,
@@ -220,10 +287,11 @@ pub fn index_sessions_with_progress(
             }
         });
 
-        cache.insert(path.to_path_buf(), (freshness, session.clone()));
-        if let Some(session) = session {
-            out.push(session);
-        }
+        cache.insert(
+            path.to_path_buf(),
+            (freshness, session.clone(), stats.clone()),
+        );
+        sink(path, &session, &stats);
 
         files_done += 1;
         bytes_done += freshness.1;
@@ -249,10 +317,14 @@ pub fn index_sessions_with_progress(
 
     // Drop cache entries for transcripts that no longer exist so deleted
     // sessions leave the list rather than lingering forever.
-    cache.retain(|path, _| seen.contains(path));
-
-    sort_sessions(&mut out);
-    out
+    //
+    // A session-only walk never VISITS subagent transcripts, so their absence
+    // from `seen` does not mean they were deleted. Evicting them here would make
+    // the 3-second session poll throw away the dashboard's cached statistics and
+    // force a full re-parse on every dashboard open.
+    cache.retain(|path, _| {
+        seen.contains(path) || (!include_subagents && crate::stats::is_subagent_transcript(path))
+    });
 }
 
 #[cfg(test)]
@@ -283,6 +355,45 @@ mod tests {
         writeln!(c, r#"{{"type":"user","message":{{"role":"user","content":"hi"}},"entrypoint":"cli","sessionId":"ccc","cwd":"/Users/s/code/repo/worktrees/feat","interruptedByShutdown":true}}"#).unwrap();
 
         dir
+    }
+
+    #[test]
+    fn subagent_transcripts_are_discovered_without_becoming_sessions() {
+        // Subagent transcripts live at <project>/<stem>/subagents/agent-<id>.jsonl,
+        // which is depth 4 from the projects root -- the walk used to stop at
+        // depth 2 and never saw them. Measured on a real tree they hold 16.4% of
+        // all tool calls, so missing them silently under-reports the dashboard.
+        let dir = fixture_tree();
+        let sub = dir
+            .path()
+            .join("-Users-s-code-repo")
+            .join("aaa")
+            .join("subagents");
+        fs::create_dir_all(&sub).unwrap();
+        let mut s = fs::File::create(sub.join("agent-1.jsonl")).unwrap();
+        writeln!(s, r#"{{"type":"assistant","isSidechain":true,"timestamp":"2026-08-08T18:00:00.000Z","message":{{"role":"assistant","content":[{{"type":"tool_use","id":"t1","name":"Grep","input":{{}}}}]}}}}"#).unwrap();
+
+        let entries = index_entries(dir.path());
+        let found = entries
+            .iter()
+            .find(|e| e.path.ends_with("agent-1.jsonl"))
+            .expect("subagent transcript must be walked");
+
+        assert!(
+            found.session.is_none(),
+            "a subagent transcript is not a session"
+        );
+        assert_eq!(
+            found.stats.tools.get("Grep").copied(),
+            Some(1),
+            "its tool calls must be extracted, got {:?}",
+            found.stats.tools
+        );
+        assert_eq!(
+            index_sessions(dir.path()).len(),
+            2,
+            "the session count must be unchanged by adding a subagent"
+        );
     }
 
     #[test]
@@ -338,7 +449,7 @@ mod tests {
             return;
         }
         let total = WalkDir::new(&root)
-            .max_depth(2)
+            .max_depth(4)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
